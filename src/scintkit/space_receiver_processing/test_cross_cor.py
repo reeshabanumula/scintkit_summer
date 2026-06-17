@@ -109,9 +109,9 @@ def cross_correlation(sig1, sig2):
     cor = np.correlate(norm1, norm2, mode = 'full')
     cor_norm = cor/ (np.linalg.norm(norm1) * np.linalg.norm(norm2))
 
-    norm_lag = sp.correlation_lags(len(norm1),len(norm2), mode = 'full')
-
-    plt.plot(norm_lag, cor_norm)
+    lag_norm = sp.correlation_lags(len(norm1),len(norm2), mode = 'full')
+    
+    plt.plot(lag_norm, cor_norm)
     plt.xlabel('lag')
     plt.ylabel('correlation  (normalized)')
     plt.title('Normalized Cross Correlation')
@@ -121,11 +121,11 @@ def cross_correlation(sig1, sig2):
     #figure out how to correlate lag to time shift
 
     max_corr = np.max(cor_norm)
-    best_lag = norm_lag[np.argmax(cor_norm)]
+    best_lag = lag_norm[np.argmax(cor_norm)]
     
-    return max_corr, best_lag
+    return max_corr, best_lag, cor_norm, lag_norm
 
-correlation, lag_b = cross_correlation(rA, rB)
+correlation, lag_b,cor_norm, lag_norm = cross_correlation(rA, rB)
 
 print(f'The max correlation is : {correlation}')
 print(f'The lag is: {lag_b}')
