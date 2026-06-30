@@ -50,7 +50,7 @@ print(f"time to create new time: {time.time() - start:.3f} seconds")
 thresh = cf.thresh  # threshold for s4 scintillation measurement
 
 
-########################
+#### start cross corr file creation
 
 rstart = time.time()
 
@@ -63,9 +63,7 @@ for (svid, cons), sat_group in sat_groups:
     # group the data into different satellites
     sat_group = f.datetime_to_seconds(sat_group)
 
-    min_groups = sat_group.groupby(
-        sat_group['datetime'].dt.floor('min')
-    )
+    min_groups = sat_group.groupby(sat_group['datetime'].dt.floor('min'))
 
     # with the chosen satellite for this iteration
     # find s4 and then determine scintillation
@@ -117,34 +115,15 @@ cross_cor = pd.DataFrame(scint)
 print(f"Processed {len(cross_cor)} scintillation events")
 print(f"Runtime: {time.time() - rstart:.3f} seconds")
 
-print(cross_cor)
 
 #add elev and azimuth #going to use average/mean value for each minute Added them into df in the loop as we can just take the average of each minute
+#done
 
-print(cross_cor.columns.tolist())
+cross_cor.to_parquet('src/scintkit/space_receiver_processing/_corrs.pq')
 
-print(cross_cor['r1loc'])
 
-1/0
-##################
-# plotting method of normal cross correlation
-# plot by finding 1 satellite from df and then choosing 1 event
 
-sat = cross_cor[
-    (cross_cor['svid'] == 10) &
-    (cross_cor['cons'] == 0)
-]
 
-event = sat.iloc[10]
 
-print(sat['max_corr'].iloc[10])
-print(sat['best_lag'].iloc[10])
-print(sat['time_delay'].iloc[10])
 
-plt.plot(event['lag_norm'], event['corr_norm'])
-plt.xlabel('lag')
-plt.ylabel('correlation (normalized)')
-plt.title('Normalized Cross Correlation')
-plt.show()
 
-# currently does not have distance calculations in this file
