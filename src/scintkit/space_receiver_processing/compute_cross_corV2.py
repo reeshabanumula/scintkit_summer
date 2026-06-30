@@ -7,19 +7,20 @@ import functions as f
 from scintkit.preprocessing.format import temp_formating
 from scintkit.services.phase_detrend import detect_sampling_rate
 import time
+import CONFIG as cf
+
 
 start = time.time()
 
 # import pqs
-dfa = pd.read_parquet(r'C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_lvl0\scintpi3_20221004_2000_359060.7812W_72122.4141S_v325_lvl0.pq')
-
-dfb = pd.read_parquet(r'C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_lvl0\scintpi3_20221004_2000_359072.7500W_72126.9375S_v325_lvl0.pq')
+dfa = cf.Data_folder1
+dfb = cf.Data_folder2
 
 print(f"time to read files: {time.time() - start:.3f} seconds")
 
 # filter dfs to contain certain elevation
-dfa = dfa[dfa['elev'] > 20]
-dfb = dfb[dfb['elev'] > 20]
+dfa = dfa[dfa['elev'] > 20].copy()
+dfb = dfb[dfb['elev'] > 20].copy()
 
 # fit distance into here?
 
@@ -30,8 +31,10 @@ dfb = temp_formating(dfb)
 samp_ra = detect_sampling_rate(dfa)
 samp_rb = detect_sampling_rate(dfb)
 
-print(samp_ra)
-print(samp_rb)
+# print(samp_ra)
+# print(samp_rb)
+
+dt = 1 / samp_ra
 
 # merge 2 receiver dfs
 merged = dfa.merge(dfb, on=["datetime", "svid", "cons"], suffixes=("_A", "_B"))
@@ -40,22 +43,14 @@ merged['snr_diff'] = abs(merged['snr1_A'] - merged['snr1_B'])
 # add temp formatting and detect sampling rate
 merged = temp_formating(merged)
 
-print(merged.columns.tolist())
-
 # need to normalize time from datetime to just time in s
-
 
 print(f"time to create new time: {time.time() - start:.3f} seconds")
 
-thresh = 0.2  # threshold for s4 scintillation measurement
+thresh = cf.thresh  # threshold for s4 scintillation measurement
 
-samp_r = detect_sampling_rate(merged)
-print(samp_r)
-
-dt = 1 / samp_r
 
 ########################
-1 / 0
 
 rstart = time.time()
 
@@ -96,6 +91,17 @@ for (svid, cons), sat_group in sat_groups:
                 'minute': min,
                 's4A': s4a,
                 's4B': s4b,
+
+                #adding elev and azim
+                'elev_A' : group['elev_A'].mean(),
+                'elev_B' : group['elev_B'].mean(),
+                'azim_A' : group['azim_A'].mean(),
+                'azim_B' : group['azim_B'].mean(),
+
+                #adding location, using the location at the start of each minute not the mean, can be changed
+                'r1loc' : (group['lat_A'].iloc[0], group['lon_A'].iloc[0], group['hei_A'].mean()),
+                'r2loc' : (group['lat_B'].iloc[0], group['lon_B'].iloc[0], group['hei_B'].mean()),
+
                 'corr_norm': cor_norm,
                 'lag_norm': lag_norm,
                 'max_corr': correlation,
@@ -106,11 +112,20 @@ for (svid, cons), sat_group in sat_groups:
 # create dataframe storing all scintillation events
 cross_cor = pd.DataFrame(scint)
 
+#add elevation and azimuth to df here and locations r1 and r2
+
 print(f"Processed {len(cross_cor)} scintillation events")
 print(f"Runtime: {time.time() - rstart:.3f} seconds")
 
-# print(cross_cor)
+print(cross_cor)
 
+#add elev and azimuth #going to use average/mean value for each minute Added them into df in the loop as we can just take the average of each minute
+
+print(cross_cor.columns.tolist())
+
+print(cross_cor['r1loc'])
+
+1/0
 ##################
 # plotting method of normal cross correlation
 # plot by finding 1 satellite from df and then choosing 1 event
