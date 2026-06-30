@@ -97,8 +97,8 @@ for (svid, cons), sat_group in sat_groups:
                 'azim_B' : group['azim_B'].mean(),
 
                 #adding location, using the location at the start of each minute not the mean, can be changed
-                'r1loc' : (group['lat_A'].iloc[0], group['lon_A'].iloc[0], group['hei_A'].mean()),
-                'r2loc' : (group['lat_B'].iloc[0], group['lon_B'].iloc[0], group['hei_B'].mean()),
+                'r1loc' : (group['lat_A'].iloc[0]/10000, group['lon_A'].iloc[0]/10000, group['hei_A'].mean()/1000),
+                'r2loc' : (group['lat_B'].iloc[0]/10000, group['lon_B'].iloc[0]/10000, group['hei_B'].mean()/1000),
 
                 'corr_norm': cor_norm,
                 'lag_norm': lag_norm,
