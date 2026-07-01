@@ -10,3 +10,5 @@ run_conversion(
     temp_root = r"C:\Users\irees\Downloads\Summer_learning\research26\tmp",
     verbose=True,
 )
+
+#moved to config
