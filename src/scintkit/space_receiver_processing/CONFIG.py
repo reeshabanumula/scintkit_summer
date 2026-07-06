@@ -1,21 +1,49 @@
 import pandas as pd
+from pathlib import Path
 
-Data_folder1 = pd.read_parquet(r'C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_lvl0\scintpi3_20221004_2000_359060.7812W_72122.4141S_v325_lvl0.pq')
-Data_folder2 = pd.read_parquet(r'C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_lvl0\scintpi3_20221004_2000_359072.7500W_72126.9375S_v325_lvl0.pq')
-thresh = 0.2
+#create path from txt file to py
+
+config_path = Path(__file__).parent / "configurations.txt"
+
+with open(config_path, "r") as file:
+    lines = file.readlines()
+
+config = {}
+
+for line in lines:
+    if line.strip() == '' or line.startswith('#'):
+        continue
+    key, value = line.split('=', 1)
+    key = key.strip()
+    value = value.strip()
+
+    config[key] = value
+
+#start connecting key values to variables used in the code
+
+Data_folder1 = config['Data_folder1']
+Data_folder2 = config['Data_folder2']
+thresh = float(config['Threshold for s4'])
+
+Interpolate_for_nan= config['Interpolating for Nan Values'] == 'True' 
+origin_loc = float(config['origin location'])
+latitude = float(config['latitude'])
+longitude = float(config['longitude'])
+sat = config["satellite"]
+R_earth = float(config['R_earth'])
+
 
 #binzip conversion
 
-from scintkit.pipelines.lvl0_convert_to_pq import run_conversion
+input_pattern = config['input pattern']
+input_root = config['input root']
+output_root = config['output root']
+temp_root = config['temp root']
+verbose =config['verbose'] == 'True'
 
-run_conversion(
-    mode="single",
-    input_pattern=r"C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_data\*.bin.zip",
-    input_root=r"C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_data",
-    output_root=r"C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_lvl0",
-    infer_missing=True,
-    n_workers=1,
-    temp_root = r"C:\Users\irees\Downloads\Summer_learning\research26\tmp",
-    verbose=True,
-)
 
+
+#need to finalize proper values for origin lat lon and sat
+#need to develop interpolate or drop nan values solution
+
+#R = 6371 #km

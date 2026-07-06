@@ -1,14 +1,16 @@
 from scintkit.pipelines.lvl0_convert_to_pq import run_conversion
+import CONFIG as cf
+
 
 run_conversion(
     mode="single",
-    input_pattern=r"C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_data\*.bin.zip",
-    input_root=r"C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_data",
-    output_root=r"C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_lvl0",
+    input_pattern= cf.input_pattern,
+    input_root= cf.input_root,
+    output_root= cf.output_root,
     infer_missing=True,
     n_workers=1,
-    temp_root = r"C:\Users\irees\Downloads\Summer_learning\research26\tmp",
-    verbose=True,
+    temp_root = cf.temp_root,
+    verbose= cf.verbose,
 )
 
-#moved to config
+#should be independent

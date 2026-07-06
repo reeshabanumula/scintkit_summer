@@ -1,0 +1,24 @@
+#file locations
+
+Data_folder1 = C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_lvl0\scintpi3_20221004_2000_359060.7812W_72122.4141S_v325_lvl0.pq
+Data_folder2 = C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_lvl0\scintpi3_20221004_2000_359072.7500W_72126.9375S_v325_lvl0.pq
+
+#Analysis Settings
+
+Threshold for s4 = 0.2
+Interpolating for Nan Values = False 
+origin location = 0
+latitude = 0
+longitude = 0
+satellite = 0
+R_earth = 6371
+
+
+#run conversion details
+
+input pattern = "C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_data\*.bin.zip"
+input root = "C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_data"
+output root = "C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_lvl0"
+temp root = "C:\Users\irees\Downloads\Summer_learning\research26\tmp"
+verbose = True
+

@@ -13,8 +13,8 @@ import CONFIG as cf
 start = time.time()
 
 # import pqs
-dfa = cf.Data_folder1
-dfb = cf.Data_folder2
+dfa = pd.read_parquet(cf.Data_folder1)
+dfb = pd.read_parquet(cf.Data_folder2)
 
 print(f"time to read files: {time.time() - start:.3f} seconds")
 
@@ -24,9 +24,15 @@ dfb = dfb[dfb['elev'] > 20].copy()
 
 # fit distance into here?
 
+print(dfa)
+
 # individual sampling rates
 dfa = temp_formating(dfa)
 dfb = temp_formating(dfb)
+
+
+print(dfa)
+
 
 samp_ra = detect_sampling_rate(dfa)
 samp_rb = detect_sampling_rate(dfb)
@@ -39,9 +45,6 @@ dt = 1 / samp_ra
 # merge 2 receiver dfs
 merged = dfa.merge(dfb, on=["datetime", "svid", "cons"], suffixes=("_A", "_B"))
 merged['snr_diff'] = abs(merged['snr1_A'] - merged['snr1_B'])
-
-# add temp formatting and detect sampling rate
-merged = temp_formating(merged)
 
 # need to normalize time from datetime to just time in s
 
@@ -92,11 +95,9 @@ for (svid, cons), sat_group in sat_groups:
                 
 
                 #adding elev and azim
-                'elev_A' : group['elev_A'].mean(),
-                'elev_B' : group['elev_B'].mean(),
-                'azim_A' : group['azim_A'].mean(),
-                'azim_B' : group['azim_B'].mean(),
-
+                'elev' : group['elev_A'].mean(),
+                'azim' : group['azim_A'].mean(),
+                
                 #adding location, using the location at the start of each minute not the mean, can be changed
                 'r1loc' : (group['lat_A'].iloc[0]/10000, group['lon_A'].iloc[0]/10000, group['hei_A'].mean()/1000),
                 'r2loc' : (group['lat_B'].iloc[0]/10000, group['lon_B'].iloc[0]/10000, group['hei_B'].mean()/1000),
@@ -104,7 +105,7 @@ for (svid, cons), sat_group in sat_groups:
                 'corr_norm': cor_norm,
                 'lag_norm': lag_norm,
                 'max_corr': correlation,
-                'best_lag': lag_b,
+                #'best_lag': lag_b,
                 'time_delay': time_delay
             })
 
@@ -121,9 +122,6 @@ print(f"Runtime: {time.time() - rstart:.3f} seconds")
 #done
 
 cross_cor.to_parquet('src/scintkit/space_receiver_processing/_corrs.pq')
-
-
-
 
 
 
