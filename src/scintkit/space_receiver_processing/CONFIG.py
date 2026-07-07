@@ -25,13 +25,14 @@ Data_folder1 = config['Data_folder1']
 Data_folder2 = config['Data_folder2']
 thresh = float(config['Threshold for s4'])
 
-Interpolate_for_nan= config['Interpolating for Nan Values'] == 'True' 
+
 origin_loc = float(config['origin location'])
 latitude = float(config['latitude'])
 longitude = float(config['longitude'])
 sat = config["satellite"]
 R_earth = float(config['R_earth'])
 
+nan_method = config["nan_method"]
 
 #binzip conversion
 
@@ -41,6 +42,10 @@ output_root = config['output root']
 temp_root = config['temp root']
 verbose =config['verbose'] == 'True'
 
+
+#output folders
+output_folder = config["output_folder"]
+cross_correlation_file = config['cross_correlation_file']
 
 
 #need to finalize proper values for origin lat lon and sat

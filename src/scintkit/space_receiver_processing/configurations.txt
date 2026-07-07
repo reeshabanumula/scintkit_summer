@@ -6,13 +6,19 @@ Data_folder2 = C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_lvl
 #Analysis Settings
 
 Threshold for s4 = 0.2
-Interpolating for Nan Values = False 
 origin location = 0
 latitude = 0
 longitude = 0
 satellite = 0
 R_earth = 6371
 
+# NaN Handling
+
+nan_method = drop
+# Options:
+# interpolate
+# drop
+# none
 
 #run conversion details
 
@@ -22,3 +28,6 @@ output root = "C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_lvl
 temp root = "C:\Users\irees\Downloads\Summer_learning\research26\tmp"
 verbose = True
 
+# Output files
+output_folder = space_receiver_processing
+cross_correlation_file = _corrs.pq
