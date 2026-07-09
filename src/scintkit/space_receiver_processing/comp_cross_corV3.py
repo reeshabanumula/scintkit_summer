@@ -15,11 +15,38 @@ importlib.reload(cf)
 
 start = time.time()
 
+print(f'started at {start}')
+#create file organization code:
+
+files = f.find_files(cf.input_directory)
+
+receiverA_files, receiverB_files = f.org_receivers(files, cf.r_latitude, cf.r_longitude, cf.lat_tol, cf.lon_tol)
+
+
+    #finally have all the receiver data organized into 2 seperate files 
+
+# ----- Verification -----
+print(f"Found {len(files)} total files")
+print(f"Receiver A: {len(receiverA_files)} files")
+print(f"Receiver B: {len(receiverB_files)} files")
+
+if len(receiverA_files) == 0:
+    raise ValueError("No files were assigned to Receiver A.")
+
+if len(receiverB_files) == 0:
+    raise ValueError("No files were assigned to Receiver B.")
+
+
+
 # import pqs
-dfa = pd.read_parquet(cf.Data_folder1)
-dfb = pd.read_parquet(cf.Data_folder2)
+dfa = f.load_receiver(receiverA_files)
+dfb = f.load_receiver(receiverB_files)
 
 print(f"time to read files: {time.time() - start:.3f} seconds")
+
+dfa = dfa.sort_values("datetime").reset_index(drop=True)
+dfb = dfb.sort_values("datetime").reset_index(drop=True)
+
 
 # filter dfs to contain certain elevation
 dfa = dfa[dfa['elev'] > 20].copy()
@@ -69,7 +96,7 @@ for (svid, cons), sat_group in sat_groups:
     # find s4 and then determine scintillation
     for min, group in min_groups:
         
-        f.handle_nan(group, cf.nan_method)
+        group = f.handle_nan(group, cf.nan_method)
         #add nan processing
         if len(group) < 10: #makes sure there is enough samples to actually process data
             continue
@@ -105,9 +132,9 @@ for (svid, cons), sat_group in sat_groups:
                 'rAloc' : (group['lat_A'].iloc[0]/10000, group['lon_A'].iloc[0]/10000, group['hei_A'].mean()/1000),
                 'rBloc' : (group['lat_B'].iloc[0]/10000, group['lon_B'].iloc[0]/10000, group['hei_B'].mean()/1000),
 
-                'auto_cor_A' : autoA_cor,
+                #'auto_cor_A' : autoA_cor,
                 'auto_cor_Amax' : autoA_max,
-                'auto_cor_B' : autoB_cor,
+                #'auto_cor_B' : autoB_cor,
                 'auto_cor_Bmax' : autoB_max,
 
 

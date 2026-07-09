@@ -3,13 +3,18 @@
 Data_folder1 = C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_lvl0\scintpi3_20221004_2000_359060.7812W_72122.4141S_v325_lvl0.pq
 Data_folder2 = C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_lvl0\scintpi3_20221004_2000_359072.7500W_72126.9375S_v325_lvl0.pq
 
+input_directory = C:\Users\irees\Downloads\Summer_learning\research26\1_month_test-selected_lvl0
+
 #Analysis Settings
 
 Threshold for s4 = 0.2
-origin location = 0
-latitude = 0
-longitude = 0
-satellite = 0
+
+r_latitude = -7.21224
+r_longitude = -35.90622
+lat_tol = 0.0005
+lon_tol = 0.0005
+
+r_satellite = 0
 R_earth = 6371
 
 # NaN Handling
@@ -22,10 +27,10 @@ nan_method = drop
 
 #run conversion details
 
-input pattern = "C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_data\*.bin.zip"
-input root = "C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_data"
-output root = "C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_lvl0"
-temp root = "C:\Users\irees\Downloads\Summer_learning\research26\tmp"
+input pattern = C:\Users\irees\Downloads\Summer_learning\research26\1_month_test-selected\*.bin.zip
+input root = C:\Users\irees\Downloads\Summer_learning\research26\1_month_test-selected
+output root = C:\Users\irees\Downloads\Summer_learning\research26\1_month_test-selected_lvl0
+temp root = C:\Users\irees\Downloads\Summer_learning\research26\tmp
 verbose = True
 
 # Output files

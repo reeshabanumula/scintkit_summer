@@ -26,10 +26,15 @@ Data_folder2 = config['Data_folder2']
 thresh = float(config['Threshold for s4'])
 
 
-origin_loc = float(config['origin location'])
-latitude = float(config['latitude'])
-longitude = float(config['longitude'])
-sat = config["satellite"]
+input_directory = (config['input_directory'])
+r_latitude = float(config['r_latitude'])
+r_longitude = float(config['r_longitude'])
+
+lat_tol = float(config['lat_tol'])
+lon_tol = float(config['lon_tol'])
+
+
+#sat = config["satellite"]
 R_earth = float(config['R_earth'])
 
 nan_method = config["nan_method"]

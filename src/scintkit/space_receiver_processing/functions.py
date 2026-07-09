@@ -2,6 +2,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy.signal as sp
 import CONFIG as cf
+import re
+import pandas as pd
+
+
 
 def cross_correlation(sig1, sig2):
     norm1 = (sig1 - np.mean(sig1))/np.std(sig1)
@@ -81,3 +85,63 @@ def handle_nan(df, method):
             "Choose 'drop', 'interpolate', or 'none'."
         )
     return df
+
+
+#for organizing the files from a bigger folder
+
+def extract_coord (file):
+
+    pattern = r'_(\d+\.\d+)([EW])_(\d+\.\d+)([NS])_'
+
+    match = re.search(pattern, file.name)
+
+    if match is None:
+        raise ValueError(f"Could not read coordinates from {file.name}")
+
+    longitude = float(match.group(1)) / 10000
+    latitude = float(match.group(3)) / 10000
+
+    return latitude, longitude
+
+def org_receivers(files, reference_lat, reference_lon, lat_tol, lon_tol):
+    
+    receiverA = []
+    receiverB =[]
+
+    for file in files:
+        lat , lon = extract_coord (file)
+
+        if (abs(lat - reference_lat) <= lat_tol and abs(lon - reference_lon) <= lon_tol):
+            receiverA.append(file)
+        else:
+            receiverB.append(file)
+
+    return receiverA, receiverB
+
+
+def load_receiver(receiver_files):
+
+    receiver_frames = []
+
+    # Read every parquet file
+    for file in receiver_files:
+
+        df = pd.read_parquet(file)
+
+        receiver_frames.append(df)
+
+    # Combine into one dataframe
+    receiver = pd.concat(receiver_frames, ignore_index=True)
+
+    return receiver
+
+from pathlib import Path
+
+
+def find_files(input_directory):
+
+    input_directory = Path(input_directory)
+
+    files = sorted(input_directory.glob("*.pq"))
+
+    return files
