@@ -72,14 +72,19 @@ def calc_dist(rloc1, rloc2):
     #print(f'{distance} km')
     return distance
 
-def handle_nan(df, method):
+def handle_nan(df, method, sig_columns):
     if method == 'interpolate':
+
+        for column in sig_columns:
+            df[column] = df[column].ffill()
+
         #interpolate nan values using previous points
         df["snr1_A"] = df["snr1_A"].ffill()
         df["snr1_B"] = df["snr1_B"].ffill()
+
     elif method == 'drop':
         #drop all nan values
-        df = df.dropna(subset=["snr1_A", "snr1_B"]) #run it on sat 10
+        df = df.dropna(subset = sig_columns) #run it on sat 10
     elif method == 'none':
         #leave data unprocessed
         pass
@@ -167,7 +172,7 @@ def compute_s4_summary(df, snr_column, nan_method):
 
     for (minute, svid, cons), group in groups:
         # Handle NaN values
-        group = handle_nan(group, nan_method)
+        group = handle_nan(group, nan_method, sig_columns = [snr_column])
         # Skip groups with too few samples
         if len(group) < 10:
             continue
