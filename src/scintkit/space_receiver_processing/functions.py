@@ -3,10 +3,15 @@ import matplotlib.pyplot as plt
 import scipy.signal as sp
 import CONFIG as cf
 import re
+from datetime import datetime
 import pandas as pd
+from scintkit.preprocessing.format import temp_formating
+from scintkit.services.phase_detrend import detect_sampling_rate
+from pathlib import Path
+import time
 
 
-
+#cross correlation function to normalized outputs
 def cross_correlation(sig1, sig2):
     norm1 = (sig1 - np.mean(sig1))/np.std(sig1)
     norm2 = (sig2 - np.mean(sig2))/np.std(sig2)
@@ -25,7 +30,7 @@ def cross_correlation(sig1, sig2):
     return max_corr, best_lag, cor_norm, lag_norm
 
 
-# helps create s4
+# helps create s4 changes snr to linear
 def db2lin(sig_db):
     return 10 ** (sig_db / 10)
 
@@ -74,7 +79,7 @@ def handle_nan(df, method):
         df["snr1_B"] = df["snr1_B"].ffill()
     elif method == 'drop':
         #drop all nan values
-        df = df.dropna(subset=["snr1_A", "snr1_B"])
+        df = df.dropna(subset=["snr1_A", "snr1_B"]) #run it on sat 10
     elif method == 'none':
         #leave data unprocessed
         pass
@@ -119,22 +124,6 @@ def org_receivers(files, reference_lat, reference_lon, lat_tol, lon_tol):
     return receiverA, receiverB
 
 
-def load_receiver(receiver_files):
-
-    receiver_frames = []
-
-    # Read every parquet file
-    for file in receiver_files:
-
-        df = pd.read_parquet(file)
-
-        receiver_frames.append(df)
-
-    # Combine into one dataframe
-    receiver = pd.concat(receiver_frames, ignore_index=True)
-
-    return receiver
-
 from pathlib import Path
 
 
@@ -145,3 +134,126 @@ def find_files(input_directory):
     files = sorted(input_directory.glob("*.pq"))
 
     return files
+
+
+def compute_s4_summary(df, snr_column, nan_method):
+    """
+    Computes one S4 value for every satellite during every minute.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Receiver dataframe.
+
+    snr_column : str
+        Name of the SNR column (ex. 'snr1').
+
+    nan_method : str
+        Method used by handle_nan().
+
+    Returns
+    -------
+    pandas.DataFrame
+        Columns:
+            minute
+            svid
+            cons
+            s4
+    """
+
+    s4_summary = []
+    # Group data by minute, satellite, and constellation
+    groups = df.groupby([df["datetime"].dt.floor("min"),"svid","cons"])
+
+    for (minute, svid, cons), group in groups:
+        # Handle NaN values
+        group = handle_nan(group, nan_method)
+        # Skip groups with too few samples
+        if len(group) < 10:
+            continue
+
+        # Convert SNR from dB to linear
+        sig_lin = db2lin(group[snr_column])
+        # Compute S4
+        s4 = np.std(sig_lin) / np.mean(sig_lin)
+
+        # Save result
+        s4_summary.append({
+            "minute": minute,
+            "svid": svid,
+            "cons": cons,
+            "s4": s4
+        })
+
+    return pd.DataFrame(s4_summary)
+
+
+#file pairing
+
+def extract_file_datetime(file):
+    """
+    Returns the datetime contained in a ScintPi filename.
+
+    Example:
+    scintpi3_20250325_1552_359062.0938W...
+            ↓
+    datetime(2025, 3, 25, 15, 52)
+    """
+
+    match = re.search(r'_(\d{8})_(\d{4})_', file.name)
+
+    if match is None:
+        raise ValueError(f"Could not extract datetime from {file.name}")
+
+    return datetime.strptime(match.group(1) + match.group(2),"%Y%m%d%H%M") #changes string to a datetime, last part tells python how to read this new value
+
+
+
+
+def pair_receiver_files(receiverA_files, receiverB_files, cf): #takes in configuration file as a parameter
+
+    receiverB_dict = {
+        extract_file_datetime(file): file
+        for file in receiverB_files
+    }
+
+    paired_files = []
+
+    for fileA in receiverA_files:
+
+        datetimeA = extract_file_datetime(fileA)
+
+        # ---------------- EXACT ----------------
+
+        if cf.pairing_mode == "exact":
+
+            if datetimeA in receiverB_dict:
+                paired_files.append((fileA, receiverB_dict[datetimeA]))
+
+            elif cf.unpaired_file_action == "skip":
+                print(f"Skipping {fileA.name}")
+
+            else:
+                raise ValueError(f"No matching file for {fileA.name}")
+
+        # ---------------- NEAREST ----------------
+
+        elif cf.pairing_mode == "nearest":
+
+            closest = min(receiverB_dict.keys(), key=lambda t: abs((t - datetimeA).total_seconds()))
+
+            difference = abs((closest - datetimeA).total_seconds()) / 60
+
+            if difference <= cf.pairing_tolerance:
+                paired_files.append((fileA, receiverB_dict[closest]))
+
+            elif cf.unpaired_file_action == "skip":
+                print(f"Skipping {fileA.name}")
+
+            else:
+                raise ValueError(f"No nearby match for {fileA.name}")
+
+        else:
+            raise ValueError("Invalid pairing_mode")
+
+    return paired_files

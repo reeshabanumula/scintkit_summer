@@ -15,7 +15,7 @@ importlib.reload(cf)
 
 start = time.time()
 
-print(f'started at {start}')
+print(f'started at {start- start}')
 #create file organization code:
 
 files = f.find_files(cf.input_directory)

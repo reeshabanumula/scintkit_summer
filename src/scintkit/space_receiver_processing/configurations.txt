@@ -1,38 +1,80 @@
-#file locations
+############################################################
+# DATA FILES
+############################################################
 
+# Test files (used for single-file debugging)
 Data_folder1 = C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_lvl0\scintpi3_20221004_2000_359060.7812W_72122.4141S_v325_lvl0.pq
 Data_folder2 = C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_lvl0\scintpi3_20221004_2000_359072.7500W_72126.9375S_v325_lvl0.pq
 
-input_directory = C:\Users\irees\Downloads\Summer_learning\research26\1_month_test-selected_lvl0
+# Directory containing all Level-0 parquet files
+input_directory = C:\Users\irees\Downloads\Summer_learning\research26\1_month_test-selected_lvl0_25-31
 
-#Analysis Settings
 
-Threshold for s4 = 0.2
+############################################################
+# ANALYSIS SETTINGS
+############################################################
 
-r_latitude = -7.21224
-r_longitude = -35.90622
-lat_tol = 0.0005
-lon_tol = 0.0005
+s4_threshold = 0.20
 
-r_satellite = 0
-R_earth = 6371
+receiver_latitude = 7.21224
+receiver_longitude = 35.90622
 
-# NaN Handling
+latitude_tolerance = 0.0005
+longitude_tolerance = 0.0005
+
+satellite_altitude = 0
+earth_radius_km = 6371
+
+
+############################################################
+# NaN HANDLING
+############################################################
 
 nan_method = drop
+
 # Options:
-# interpolate
-# drop
-# none
+#   "drop"
+#   "interpolate"
+#   "none"
 
-#run conversion details
 
-input pattern = C:\Users\irees\Downloads\Summer_learning\research26\1_month_test-selected\*.bin.zip
-input root = C:\Users\irees\Downloads\Summer_learning\research26\1_month_test-selected
-output root = C:\Users\irees\Downloads\Summer_learning\research26\1_month_test-selected_lvl0
-temp root = C:\Users\irees\Downloads\Summer_learning\research26\tmp
+############################################################
+# BIN.ZIP CONVERSION SETTINGS
+############################################################
+
+input_pattern = C:\Users\irees\Downloads\1_month_test-selected (1)\*.bin.zip
+
+input_root = C:\Users\irees\Downloads\1_month_test-selected (1)
+output_root = C:\Users\irees\Downloads\Summer_learning\research26\1_month_test-selected_lvl0_25-31
+temp_root = C:\Users\irees\Downloads\Summer_learning\research26\tmp
+
 verbose = True
 
-# Output files
-output_folder = space_receiver_processing
-cross_correlation_file = _corrs.pq
+
+############################################################
+# OUTPUT SETTINGS
+############################################################
+
+output_folder = C:\Users\irees\Downloads\Summer_learning\research26\results
+
+cross_correlation_file = "_corrs.pq"
+
+############################################################
+# File Pairing Configuration
+############################################################
+
+# How files from Receiver A and Receiver B should be paired.
+# Options:
+#   exact   -> Only pair files with the exact same timestamp/minute.
+#   nearest -> Pair with the closest timestamp within the tolerance.
+pairing_mode = exact
+
+# Maximum allowed difference when pairing files.
+# Only used when pairing_mode = nearest.
+pairing_tolerance = 1
+
+# What to do if no valid pair is found.
+# Options:
+#   skip  -> Ignore the unpaired file and continue.
+#   error -> Stop the program and report the missing pair.
+unpaired_file_action = skip

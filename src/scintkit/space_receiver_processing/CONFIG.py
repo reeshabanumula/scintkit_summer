@@ -19,32 +19,30 @@ for line in lines:
 
     config[key] = value
 
-#start connecting key values to variables used in the code
-
+#file locations
 Data_folder1 = config['Data_folder1']
 Data_folder2 = config['Data_folder2']
-thresh = float(config['Threshold for s4'])
-
-
 input_directory = (config['input_directory'])
-r_latitude = float(config['r_latitude'])
-r_longitude = float(config['r_longitude'])
 
-lat_tol = float(config['lat_tol'])
-lon_tol = float(config['lon_tol'])
 
+#analysis details
+thresh = float(config['s4_threshold'])
+r_latitude = float(config['receiver_latitude'])
+r_longitude = float(config['receiver_longitude'])
+lat_tol = float(config['latitude_tolerance'])
+lon_tol = float(config['longitude_tolerance'])
+
+R_earth = float(config['earth_radius_km'])
 
 #sat = config["satellite"]
-R_earth = float(config['R_earth'])
-
 nan_method = config["nan_method"]
 
-#binzip conversion
 
-input_pattern = config['input pattern']
-input_root = config['input root']
-output_root = config['output root']
-temp_root = config['temp root']
+#binzip conversion
+input_pattern = config['input_pattern']
+input_root = config['input_root']
+output_root = config['output_root']
+temp_root = config['temp_root']
 verbose =config['verbose'] == 'True'
 
 
@@ -53,7 +51,7 @@ output_folder = config["output_folder"]
 cross_correlation_file = config['cross_correlation_file']
 
 
-#need to finalize proper values for origin lat lon and sat
-#need to develop interpolate or drop nan values solution
-
-#R = 6371 #km
+# File pairing options
+pairing_mode = config["pairing_mode"].strip().lower()
+pairing_tolerance = int(config["pairing_tolerance"])
+unpaired_file_action = config["unpaired_file_action"].strip().lower()
