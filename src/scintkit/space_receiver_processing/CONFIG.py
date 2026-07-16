@@ -29,6 +29,7 @@ input_directory = (config['input_directory'])
 thresh = float(config['s4_threshold'])
 r_latitude = float(config['receiver_latitude'])
 r_longitude = float(config['receiver_longitude'])
+r_height = float(config['reciever_height'])
 lat_tol = float(config['latitude_tolerance'])
 lon_tol = float(config['longitude_tolerance'])
 

@@ -18,6 +18,8 @@ s4_threshold = 0.20
 
 receiver_latitude = 7.21224
 receiver_longitude = 35.90622
+reciever_height = 0
+
 
 latitude_tolerance = 0.0005
 longitude_tolerance = 0.0005
@@ -57,7 +59,7 @@ verbose = True
 
 output_folder = C:\Users\irees\Downloads\Summer_learning\research26\results
 
-cross_correlation_file = "_corrs.pq"
+cross_correlation_file = _corrs.pq
 
 ############################################################
 # File Pairing Configuration
@@ -67,14 +69,19 @@ cross_correlation_file = "_corrs.pq"
 # Options:
 #   exact   -> Only pair files with the exact same timestamp/minute.
 #   nearest -> Pair with the closest timestamp within the tolerance.
+
 pairing_mode = exact
+
 
 # Maximum allowed difference when pairing files.
 # Only used when pairing_mode = nearest.
+
 pairing_tolerance = 1
+
 
 # What to do if no valid pair is found.
 # Options:
 #   skip  -> Ignore the unpaired file and continue.
 #   error -> Stop the program and report the missing pair.
+
 unpaired_file_action = skip

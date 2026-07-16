@@ -94,7 +94,7 @@ def handle_nan(df, method):
 
 #for organizing the files from a bigger folder
 
-def extract_coord (file):
+def extract_coord (file, height = 0):
 
     pattern = r'_(\d+\.\d+)([EW])_(\d+\.\d+)([NS])_'
 
@@ -106,7 +106,7 @@ def extract_coord (file):
     longitude = float(match.group(1)) / 10000
     latitude = float(match.group(3)) / 10000
 
-    return latitude, longitude
+    return latitude, longitude, height
 
 def org_receivers(files, reference_lat, reference_lon, lat_tol, lon_tol):
     
@@ -114,7 +114,7 @@ def org_receivers(files, reference_lat, reference_lon, lat_tol, lon_tol):
     receiverB =[]
 
     for file in files:
-        lat , lon = extract_coord (file)
+        lat , lon, hei = extract_coord (file, cf.r_height)
 
         if (abs(lat - reference_lat) <= lat_tol and abs(lon - reference_lon) <= lon_tol):
             receiverA.append(file)
