@@ -27,11 +27,21 @@ input_directory = (config['input_directory'])
 
 #analysis details
 thresh = float(config['s4_threshold'])
+elevation_filter = float(config['elevation_filter'])
+
+
 r_latitude = float(config['receiver_latitude'])
 r_longitude = float(config['receiver_longitude'])
 r_height = float(config['reciever_height'])
 lat_tol = float(config['latitude_tolerance'])
 lon_tol = float(config['longitude_tolerance'])
+
+r_B_latitude = float(config['receiver_B_latitude'])
+r_B_longitude = float(config['receiver_B_longitude'])
+r_B_height = float(config['receiver_B_height'])
+
+
+
 
 R_earth = float(config['earth_radius_km'])
 

@@ -16,13 +16,23 @@ input_directory = C:\Users\irees\Downloads\Summer_learning\research26\1_month_te
 
 s4_threshold = 0.20
 
+elevation_filter = 20
+
+# Reciever A location
+
 receiver_latitude = 7.21224
 receiver_longitude = 35.90622
 reciever_height = 0
 
-
 latitude_tolerance = 0.0005
 longitude_tolerance = 0.0005
+
+# Reciever B location
+
+receiver_B_latitude = 0
+receiver_B_longitude = 0
+receiver_B_height = 0
+
 
 satellite_altitude = 0
 earth_radius_km = 6371

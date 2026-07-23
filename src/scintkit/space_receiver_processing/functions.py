@@ -78,10 +78,6 @@ def handle_nan(df, method, sig_columns):
         for column in sig_columns:
             df[column] = df[column].ffill()
 
-        #interpolate nan values using previous points
-        df["snr1_A"] = df["snr1_A"].ffill()
-        df["snr1_B"] = df["snr1_B"].ffill()
-
     elif method == 'drop':
         #drop all nan values
         df = df.dropna(subset = sig_columns) #run it on sat 10
@@ -141,7 +137,7 @@ def find_files(input_directory):
     return files
 
 
-def compute_s4_summary(df, snr_column, nan_method):
+def compute_s4_summary(df, snr_column, nan_method, output_column='s4'):
     """
     Computes one S4 value for every satellite during every minute.
 
@@ -187,7 +183,7 @@ def compute_s4_summary(df, snr_column, nan_method):
             "minute": minute,
             "svid": svid,
             "cons": cons,
-            "s4": s4
+            output_column: s4
         })
 
     return pd.DataFrame(s4_summary)
