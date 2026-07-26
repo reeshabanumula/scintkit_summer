@@ -40,7 +40,7 @@ r_B_latitude = float(config['receiver_B_latitude'])
 r_B_longitude = float(config['receiver_B_longitude'])
 r_B_height = float(config['receiver_B_height'])
 
-
+max_workers = int(config['parallel_process_max_workers'])
 
 
 R_earth = float(config['earth_radius_km'])

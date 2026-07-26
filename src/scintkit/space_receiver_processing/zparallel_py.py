@@ -221,7 +221,7 @@ def main():
         day_str = pd.Timestamp(day).strftime('%Y%m%d')
 
         output_path = output_folder / (f'{base_name}_{day_str}'
-                                    f'_A_{cf.r_latitude:.5f}_{cf.r_longitude:.5f}.pq')
+                                    f'_{cf.r_latitude:.5f}_{cf.r_longitude:.5f}.pq')
         day_df.to_parquet(output_path, index = False)
 
         print(f'Saved to {output_path.name}')

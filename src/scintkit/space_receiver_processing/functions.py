@@ -16,7 +16,7 @@ def cross_correlation(sig1, sig2):
     norm1 = (sig1 - np.mean(sig1))/np.std(sig1)
     norm2 = (sig2 - np.mean(sig2))/np.std(sig2)
 
-    cor = np.correlate(norm1, norm2, mode = 'full')
+    cor = sp.correlate(norm1, norm2, mode = 'full', method = 'auto')
     cor_norm = cor/ (np.linalg.norm(norm1) * np.linalg.norm(norm2))
 
     lag_norm = sp.correlation_lags(len(norm1),len(norm2), mode = 'full')
@@ -258,3 +258,42 @@ def pair_receiver_files(receiverA_files, receiverB_files, cf): #takes in configu
             raise ValueError("Invalid pairing_mode")
 
     return paired_files
+
+
+
+def add_s4(df):
+
+    agg_dict = {}
+
+    for i in ("1", "2", "3"):
+        snr_col = f"snr{i}"
+
+        if snr_col in df.columns:
+            agg_dict[f"s4_{i}"] = (snr_col, compute_s4)
+
+    if not agg_dict:
+        return df
+
+    s4_products = (
+        df.groupby(["prn", "minbin"], sort=False)
+        .agg(**agg_dict)
+        .reset_index()
+    )
+
+    return df.merge(
+        s4_products,
+        on=["prn", "minbin"],
+        how="left",
+    )
+
+
+def compute_s4(snr):
+    snr = snr.dropna()
+    if len(snr) == 0:
+        return np.nan
+
+    lin_snr = 10 ** (snr / 10)
+    mean = np.mean(lin_snr)
+    std = np.std(lin_snr)
+
+    return std / mean if mean > 0 else np.nan

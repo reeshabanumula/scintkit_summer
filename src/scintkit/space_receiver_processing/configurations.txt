@@ -18,6 +18,7 @@ s4_threshold = 0.20
 
 elevation_filter = 20
 
+
 # Reciever A location
 
 receiver_latitude = 7.21224
@@ -36,6 +37,9 @@ receiver_B_height = 0
 
 satellite_altitude = 0
 earth_radius_km = 6371
+
+parallel_process_max_workers = 2
+
 
 
 ############################################################

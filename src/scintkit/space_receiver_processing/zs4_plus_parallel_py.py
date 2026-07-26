@@ -53,19 +53,22 @@ def process_s4_file_pair(pair):
     dt = 1 / samp_ra
 
 ####### FIND SCINTILLATION WITH s4 #############
-    s4A_1 = f.compute_s4_summary(dfa, snr_column="snr1", nan_method=cf.nan_method, output_column = 's4_1')
-    s4A_2 = f.compute_s4_summary(dfa, snr_column="snr2", nan_method=cf.nan_method, output_column = 's4_2')
+    x_s4_time = time.time()
 
-    s4B_1 = f.compute_s4_summary(dfb, snr_column="snr1", nan_method=cf.nan_method, output_column = 's4_1')
-    s4B_2 = f.compute_s4_summary(dfb, snr_column="snr2", nan_method=cf.nan_method, output_column = 's4_2')
+    print('adding s4')
+    dfa = f.add_s4(dfa)
+    dfb = f.add_s4(dfb)
 
-    s4A = s4A_1.merge(s4A_2, on = ['minute', 'svid', 'cons'])
-    s4B = s4B_1.merge(s4B_2, on = ['minute', 'svid', 'cons'])
+    s4A = (dfa[(dfa.s4_1 > cf.thresh) & (dfa.s4_2 > cf.thresh)] [["minbin", "svid", "cons", "s4_1", "s4_2"]].drop_duplicates())
+    s4B = (dfb[(dfb.s4_1 > cf.thresh) &(dfb.s4_2 > cf.thresh)] [["minbin", "svid", "cons", "s4_1", "s4_2"]].drop_duplicates())
+
+    print(f'done adding s4, time: {time.time() - x_s4_time}s')
 
 
 ###### MERGE FILES ########
-    s4_summary = s4A.merge(s4B, on=["minute", "svid", "cons"], suffixes=("_A", "_B"))
-    interesting = s4_summary[(s4_summary['s4_1_A'] > cf.thresh)| (s4_summary['s4_1_B'] > cf.thresh)].copy()
+    s4_summary = s4A.merge(s4B, on=["minbin", "svid", "cons"], suffixes=("_A", "_B"))
+
+    interesting = s4_summary
     print(f'intersting (scintillation) events: {len(interesting)}')
 
     #changes to make looping using interesting as a bookmark more efficent
@@ -82,7 +85,7 @@ def process_s4_file_pair(pair):
     for _, event in interesting.iterrows():
 
         # Get event information
-        minute = event["minute"]
+        minute = event["minbin"]
         svid = event["svid"]
         cons = event["cons"]
 
@@ -104,16 +107,27 @@ def process_s4_file_pair(pair):
 
 
         group = groupA.merge(groupB, on=["datetime", "svid", "cons"], suffixes=("_A", "_B"))
+        group = f.handle_nan(group, cf.nan_method, sig_columns = ['snr1_A', 'snr1_B', 'snr2_A', 'snr2_B'])
+
         if len(group) < 10:
             continue
 
+
+            #SNR 1
         correlation, lag_b, cor_norm, lag_norm = f.cross_correlation(group["snr1_A"], group["snr1_B"])
         autoA_max, autoA_lagb, autoA_cor, autoA_lags = f.cross_correlation(group['snr1_A'], group['snr1_A'])
         autoB_max, autoB_lagb, autoB_cor, autoB_lags = f.cross_correlation(group['snr1_B'], group['snr1_B'])
 
+            #SNR 2
+        correlation2, lag2, cor2, lag_n_2 = f.cross_correlation(group['snr2_A'], group['snr2_B'])
+        autoA2_max, autoA_lag2, autoA_cor2, nautoA_lag2 = f.cross_correlation(group['snr2_A'], group['snr2_A'])
+        autoB2_max, autoB_lag2, autoB_cor2, nautoB_lag2 = f.cross_correlation(group['snr2_B'], group['snr2_B'])
+
+
         # check threshold of scintillation and compute correlation and run auto correlation
 
         time_delay = lag_b * dt
+        time_delay2 = lag2 * dt
 
         results.append({
             'minute': minute,
@@ -132,18 +146,33 @@ def process_s4_file_pair(pair):
             'r_A' : rAloc,
             'r_B' : rBloc,
 
-            'auto_cor_A' : autoA_cor,
-            'auto_cor_A_max' : autoA_max,
-            'auto_cor_B' : autoB_cor,
-            'auto_cor_B_max' : autoB_max,
+            #snr 1 auto
+            'auto_cor_A_1' : autoA_cor,
+            'auto_cor_A_max_1' : autoA_max,
+            'auto_cor_B_1' : autoB_cor,
+            'auto_cor_B_max_1' : autoB_max,
+
+            #SNR 1
+            'corr_norm_1': cor_norm,
+            'lag_norm_1': lag_norm,
+            'max_corr_1': correlation,
+            'best_lag_1': lag_b,
+            'time_delay_1': time_delay,
 
 
-            'corr_norm': cor_norm,
-            'lag_norm': lag_norm,
-            'max_corr': correlation,
-            'best_lag': lag_b,
-            'time_delay': time_delay
-        })
+            #snr 2 auto
+            'auto_cor_A_2' : autoA_cor2,
+            'auto_cor_A_max_2' : autoA2_max,
+            'auto_cor_B_2' : autoB_cor2,
+            'auto_cor_B_max_2' : autoB2_max,
+
+            #SNR 2
+            'corr_norm_2': cor2,
+            'lag_norm_2': lag_n_2,
+            'max_corr_2': correlation2,
+            'best_lag_2': lag2,
+            'time_delay_2': time_delay2
+            })
 
     print(f"Finished {Path(fileA).name}")
 
@@ -187,7 +216,7 @@ def main():
     all_scint = []
 
 
-    with ProcessPoolExecutor(max_workers = 2) as executor:
+    with ProcessPoolExecutor(max_workers = cf.max_workers) as executor:
 
         results = executor.map(
             process_s4_file_pair,
@@ -216,12 +245,17 @@ def main():
     output_folder = Path(cf.output_folder)
     output_folder.mkdir(parents=True, exist_ok=True)
 
+    #hemisphere determination
+    lat_letter = 'N' if cf.r_latitude >= 0 else 'S'
+    lon_letter = 'E' if cf.r_longitude >= 0 else 'W'
+    lat = abs(cf.r_latitude)
+    lon = abs(cf.r_longitude)
 
     for day, day_df in cross_cor.groupby(cross_cor['minute'].dt.date):
         day_str = pd.Timestamp(day).strftime('%Y%m%d')
 
-        output_path = output_folder / (f'{base_name}_{day_str}'
-                                    f'_A_{cf.r_latitude:.5f}_{cf.r_longitude:.5f}.pq')
+        output_path = output_folder / (f'{base_name}{day_str}'
+                                    f'{lat:.3f}{lat_letter}{lon:.3f}{lon_letter}.pq')
         day_df.to_parquet(output_path, index = False)
 
         print(f'Saved to {output_path.name}')
