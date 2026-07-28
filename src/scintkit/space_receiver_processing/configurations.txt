@@ -7,7 +7,7 @@ Data_folder1 = C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_lvl
 Data_folder2 = C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_lvl0\scintpi3_20221004_2000_359072.7500W_72126.9375S_v325_lvl0.pq
 
 # Directory containing all Level-0 parquet files
-input_directory = C:\Users\irees\Downloads\Summer_learning\research26\1_month_test-selected_lvl0_25-31
+input_directory = /Users/isaac/Documents/crosscorr/data
 
 
 ############################################################
@@ -60,9 +60,9 @@ nan_method = drop
 
 input_pattern = *.bin.zip
 
-input_root = C:\Users\irees\Downloads\1_month_test-selected (1)
-output_root = C:\Users\irees\Downloads\Summer_learning\research26\1_month_test-selected_lvl0_25-31
-temp_root = C:\Users\irees\Downloads\Summer_learning\research26\tmp
+input_root = /Users/isaac/Documents/crosscorr/data
+output_root = /Users/isaac/Documents/crosscorr/scratch
+temp_root = /Users/isaac/Documents/crosscorr/scratch
 
 verbose = True
 
@@ -70,14 +70,14 @@ verbose = True
 # file handling process
 ############################################################
 
-storage_folder = C:\Users\irees\Downloads\Summer_learning\research26\storage
-scratch_folder = C:\Users\irees\Downloads\Summer_learning\research26\scratch
+storage_folder = /Users/isaac/Documents/crosscorr/data
+scratch_folder = /Users/isaac/Documents/crosscorr/scratch
 
 ############################################################
 # OUTPUT SETTINGS
 ############################################################
 
-output_folder = C:\Users\irees\Downloads\Summer_learning\research26\results
+output_folder = /Users/isaac/Documents/crosscorr/corrs
 
 cross_correlation_file = _corrs.pq
 
