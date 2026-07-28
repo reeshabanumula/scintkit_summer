@@ -6,8 +6,10 @@ import re
 from datetime import datetime
 import pandas as pd
 from scintkit.preprocessing.format import temp_formating
+from scintkit.pipelines.lvl0_convert_to_pq import run_conversion
 from scintkit.services.phase_detrend import detect_sampling_rate
 from pathlib import Path
+import shutil
 import time
 
 
@@ -16,7 +18,7 @@ def cross_correlation(sig1, sig2):
     norm1 = (sig1 - np.mean(sig1))/np.std(sig1)
     norm2 = (sig2 - np.mean(sig2))/np.std(sig2)
 
-    cor = sp.correlate(norm1, norm2, mode = 'full', method = 'auto')
+    cor = sp.correlate(norm1, norm2, mode = 'full')
     cor_norm = cor/ (np.linalg.norm(norm1) * np.linalg.norm(norm2))
 
     lag_norm = sp.correlation_lags(len(norm1),len(norm2), mode = 'full')
@@ -137,58 +139,6 @@ def find_files(input_directory):
     return files
 
 
-def compute_s4_summary(df, snr_column, nan_method, output_column='s4'):
-    """
-    Computes one S4 value for every satellite during every minute.
-
-    Parameters
-    ----------
-    df : pandas.DataFrame
-        Receiver dataframe.
-
-    snr_column : str
-        Name of the SNR column (ex. 'snr1').
-
-    nan_method : str
-        Method used by handle_nan().
-
-    Returns
-    -------
-    pandas.DataFrame
-        Columns:
-            minute
-            svid
-            cons
-            s4
-    """
-
-    s4_summary = []
-    # Group data by minute, satellite, and constellation
-    groups = df.groupby([df["datetime"].dt.floor("min"),"svid","cons"])
-
-    for (minute, svid, cons), group in groups:
-        # Handle NaN values
-        group = handle_nan(group, nan_method, sig_columns = [snr_column])
-        # Skip groups with too few samples
-        if len(group) < 10:
-            continue
-
-        # Convert SNR from dB to linear
-        sig_lin = db2lin(group[snr_column])
-        # Compute S4
-        s4 = np.std(sig_lin) / np.mean(sig_lin)
-
-        # Save result
-        s4_summary.append({
-            "minute": minute,
-            "svid": svid,
-            "cons": cons,
-            output_column: s4
-        })
-
-    return pd.DataFrame(s4_summary)
-
-
 #file pairing
 
 def extract_file_datetime(file):
@@ -297,3 +247,367 @@ def compute_s4(snr):
     std = np.std(lin_snr)
 
     return std / mean if mean > 0 else np.nan
+
+
+
+
+
+
+def initialize_log(log_file):
+    """
+    Create the processing log if it does not already exist.
+    """
+
+    log_file = Path(log_file)
+
+    # Make sure the directory exists
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+
+    # Create empty log if necessary
+    if not log_file.exists():
+        log_file.touch()
+
+
+def log_processed_pair(fileA, fileB, log_file):
+    """
+    Append a successfully processed file pair to the log.
+
+    Format:
+        fileA,fileB
+    """
+
+    fileA = Path(fileA).name
+    fileB = Path(fileB).name
+
+    with open(log_file, "a", encoding="utf-8") as f:
+        f.write(f"{fileA},{fileB}\n")
+
+
+def create_processing_scratch(
+    storage,
+    scratch,
+    input_pattern,
+    temp_root=None,
+    n_workers=1,
+    verbose=True
+):
+
+    storage = Path(storage).resolve()
+    scratch = Path(scratch).resolve()
+
+    if not storage.exists():
+        raise FileNotFoundError(
+            f"Storage folder does not exist:\n{storage}"
+        )
+
+
+    # =========================================================
+    # 1. CREATE UNIQUE FOLDER FOR EACH RUN
+    # =========================================================
+
+    timestamp = datetime.now().strftime(
+        "%Y%m%d_%H%M%S"
+    )
+
+    scratch_root = (
+        scratch /
+        f"run_{timestamp}"
+    )
+
+    scratch_input = (
+        scratch_root /
+        "input"
+    )
+
+    scratch_pq = (
+        scratch_root /
+        "pq"
+    )
+
+
+    scratch_input.mkdir(
+        parents=True,
+        exist_ok=False
+    )
+
+    scratch_pq.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+
+    print("\n==============================================")
+    print("CREATING SCRATCH WORKSPACE")
+    print("==============================================")
+
+    print(
+        f"Scratch run folder:\n"
+        f"{scratch_root}"
+    )
+
+
+    # =========================================================
+    # 2. COPY STORAGE FILES
+    # =========================================================
+
+    storage_files = [
+        file
+        for file in storage.iterdir()
+        if file.is_file()
+    ]
+
+    print(
+        f"\nFound {len(storage_files)} "
+        f"files in storage"
+    )
+
+
+    for source_file in storage_files:
+
+        destination = (
+            scratch_input /
+            source_file.name
+        )
+
+        shutil.copy2(
+            source_file,
+            destination
+        )
+
+        print(
+            f"Copied: {source_file}"
+        )
+
+
+    # =========================================================
+    # 3. COPY EXISTING PQ FILES
+    # =========================================================
+
+    existing_pq_files = list(
+        scratch_input.glob("*.pq")
+    )
+
+    print(
+        f"\nFound {len(existing_pq_files)} "
+        f"existing parquet files."
+    )
+
+
+    for pq_file in existing_pq_files:
+
+        shutil.copy2(
+            pq_file,
+            scratch_pq / pq_file.name
+        )
+
+        print(
+            f"Existing PQ copied: "
+            f"{pq_file.name}"
+        )
+
+
+    # =========================================================
+    # 4. CREATE SCRATCH INPUT PATTERN
+    # =========================================================
+
+    # IMPORTANT:
+    #
+    # run_conversion() uses:
+    #
+    # glob.glob(input_pattern)
+    #
+    # Therefore input_pattern must contain
+    # the COMPLETE scratch path.
+    #
+    # Example:
+    #
+    # C:\...\scratch\run_123\input\*.bin.zip
+
+    scratch_input_pattern = str(
+        scratch_input /
+        input_pattern
+    )
+
+
+    print(
+        f"\nScratch conversion pattern:"
+    )
+
+    print(
+        f"    {scratch_input_pattern}"
+    )
+
+
+    # =========================================================
+    # 5. CHECK BIN.ZIP FILES
+    # =========================================================
+
+    conversion_files = list(
+        scratch_input.glob(
+            input_pattern
+        )
+    )
+
+
+    print(
+        f"\nFound {len(conversion_files)} "
+        f"files matching:"
+    )
+
+    print(
+        f"    {input_pattern}"
+    )
+
+
+    # =========================================================
+    # 6. CONVERT BIN.ZIP → PQ
+    # =========================================================
+
+    if conversion_files:
+
+        print(
+            "\nStarting bin.zip conversion..."
+        )
+
+
+        run_conversion(
+            mode="single",
+
+            # THIS is the important change
+            input_pattern=scratch_input_pattern,
+
+            input_root=str(
+                scratch_input
+            ),
+
+            output_root=str(
+                scratch_pq
+            ),
+
+            infer_missing=False,
+
+            n_workers=n_workers,
+
+            temp_root=(
+                str(temp_root)
+                if temp_root is not None
+                else None
+            ),
+
+            verbose=verbose
+        )
+
+
+    else:
+
+        print(
+            "\nNo bin.zip files found "
+            "for conversion."
+        )
+
+
+    # =========================================================
+    # 7. CHECK THAT PQ FILES EXIST
+    # =========================================================
+
+    pq_files = list(
+        scratch_pq.glob("*.pq")
+    )
+
+
+    print(
+        f"\nProcessing-ready parquet files: "
+        f"{len(pq_files)}"
+    )
+
+
+    if len(pq_files) == 0:
+
+        raise RuntimeError(
+            "No parquet files were created "
+            "or found in the scratch "
+            "processing folder."
+        )
+
+
+    print(
+        "\nScratch preparation complete."
+    )
+
+    print(
+        f"Processing folder:\n"
+        f"{scratch_pq}"
+    )
+
+
+    return scratch_pq
+
+
+
+def cleanup_processing_scratch(
+    processing_folder,
+    scratch_folder
+):
+    """
+    Delete the temporary run folder after
+    successful processing.
+
+    Original storage files are not touched.
+    """
+
+    # =========================================================
+    # 1. CONVERT PATHS
+    # =========================================================
+
+    processing_folder = Path(processing_folder).resolve()
+
+    scratch_folder = Path(scratch_folder).resolve()
+
+    # =========================================================
+    # 2. FIND THE RUN FOLDER
+    # =========================================================
+
+    # processing_folder looks like:
+    #
+    # scratch/run_20260727_153522/pq
+    #
+    # .parent gives:
+    #
+    # scratch/run_20260727_153522
+
+    scratch_run_folder = (processing_folder.parent)
+
+    # =========================================================
+    # 3. SAFETY CHECK
+    # =========================================================
+
+    if scratch_run_folder.parent != scratch_folder:
+
+        raise RuntimeError(
+            "SAFETY ERROR: The folder being "
+            "deleted is not directly inside "
+            "the configured scratch folder.\n"
+            f"Refusing to delete:\n"
+            f"{scratch_run_folder}"
+        )
+
+
+    # =========================================================
+    # 4. MAKE SURE RUN FOLDER EXISTS
+    # =========================================================
+
+    if not scratch_run_folder.exists():
+
+        print("Scratch run folder already " "does not exist.")
+
+        return
+
+    print("\n==============================================")
+    print("CLEANING SCRATCH WORKSPACE")
+    print("==============================================")
+
+    print(f"Deleting:\n" f"{scratch_run_folder}")
+
+    shutil.rmtree(scratch_run_folder)
+
+    print("Scratch workspace deleted.")

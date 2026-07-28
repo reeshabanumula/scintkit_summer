@@ -57,10 +57,14 @@ temp_root = config['temp_root']
 verbose =config['verbose'] == 'True'
 
 
+#file handling
+storage_folder = config['storage_folder']
+scratch_folder = config['scratch_folder']
+
 #output folders
 output_folder = config["output_folder"]
 cross_correlation_file = config['cross_correlation_file']
-
+log_file = Path(output_folder) / 'processed_pairs.txt'
 
 # File pairing options
 pairing_mode = config["pairing_mode"].strip().lower()

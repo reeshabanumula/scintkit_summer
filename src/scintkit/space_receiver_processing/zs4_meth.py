@@ -17,6 +17,8 @@ importlib.reload(cf)
 
 start = time.time()
 
+f.initialize_log(cf.log_file) #prepare the log file
+
 print(f'started at {start- start}')
 #create file organization code:
 
@@ -69,9 +71,6 @@ for fileA, fileB in paired_files:
     rAloc = f.extract_coord(fileA)
     rBloc = f.extract_coord(fileB)
 
-    dfa = dfa.sort_values("datetime").reset_index(drop=True)
-    dfb = dfb.sort_values("datetime").reset_index(drop=True)
-
     # filter dfs to contain certain elevation
     dfa = dfa[dfa['elev'] > cf.elevation_filter].copy()
     dfb = dfb[dfb['elev'] > cf.elevation_filter].copy()
@@ -90,7 +89,6 @@ for fileA, fileB in paired_files:
     print('adding s4')
     dfa = f.add_s4(dfa)
     dfb = f.add_s4(dfb)
-    print(dfa.columns.tolist())
 
     s4A = (dfa[(dfa.s4_1 > cf.thresh) & (dfa.s4_2 > cf.thresh)] [["minbin", "svid", "cons", "s4_1", "s4_2"]].drop_duplicates())
     s4B = (dfb[(dfb.s4_1 > cf.thresh) &(dfb.s4_2 > cf.thresh)] [["minbin", "svid", "cons", "s4_1", "s4_2"]].drop_duplicates())
@@ -179,7 +177,7 @@ for fileA, fileB in paired_files:
             'best_lag': lag_b,
             'time_delay': time_delay
         })
-
+    f.log_processed_pair(fileA, fileB, cf.log_file)
     all_scint.extend(results)
     print(f'processed {i} pairs')
     print(f"time to save dfs: {time.time() - rstart:.3f} seconds")

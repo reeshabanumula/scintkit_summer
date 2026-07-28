@@ -14,7 +14,7 @@ input_directory = C:\Users\irees\Downloads\Summer_learning\research26\1_month_te
 # ANALYSIS SETTINGS
 ############################################################
 
-s4_threshold = 0.20
+s4_threshold = 0.10
 
 elevation_filter = 20
 
@@ -58,7 +58,7 @@ nan_method = drop
 # BIN.ZIP CONVERSION SETTINGS
 ############################################################
 
-input_pattern = C:\Users\irees\Downloads\1_month_test-selected (1)\*.bin.zip
+input_pattern = *.bin.zip
 
 input_root = C:\Users\irees\Downloads\1_month_test-selected (1)
 output_root = C:\Users\irees\Downloads\Summer_learning\research26\1_month_test-selected_lvl0_25-31
@@ -66,6 +66,12 @@ temp_root = C:\Users\irees\Downloads\Summer_learning\research26\tmp
 
 verbose = True
 
+############################################################
+# file handling process
+############################################################
+
+storage_folder = C:\Users\irees\Downloads\Summer_learning\research26\storage
+scratch_folder = C:\Users\irees\Downloads\Summer_learning\research26\scratch
 
 ############################################################
 # OUTPUT SETTINGS
@@ -82,9 +88,9 @@ cross_correlation_file = _corrs.pq
 # How files from Receiver A and Receiver B should be paired.
 # Options:
 #   exact   -> Only pair files with the exact same timestamp/minute.
-#   nearest -> Pair with the closest timestamp within the tolerance.
+#   nearest -> Pair with the closest timestamp within the tolerance. 
 
-pairing_mode = exact
+pairing_mode = nearest
 
 
 # Maximum allowed difference when pairing files.

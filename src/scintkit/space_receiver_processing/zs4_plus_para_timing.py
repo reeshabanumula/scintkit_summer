@@ -68,8 +68,6 @@ def process_s4_file_pair(pair):
 
     preprocess_start = time.time()
 
-    dfa = dfa.sort_values("datetime").reset_index(drop=True)
-    dfb = dfb.sort_values("datetime").reset_index(drop=True)
 
     # Filter elevation
     dfa = dfa[dfa['elev'] > cf.elevation_filter].copy()
@@ -424,7 +422,11 @@ def process_s4_file_pair(pair):
         'merge_time': total_merge_time,
         'corr_time': total_corr_time,
 
-        'file_time': total_file_time
+        'file_time': total_file_time,
+
+        'fileA' : fileA,
+        'fileB' : fileB
+
     }
 
 
@@ -434,8 +436,10 @@ def process_s4_file_pair(pair):
 
 def main():
 
-    start = time.time()
+    f.initialize_log(cf.log_file)
 
+    start = time.time()
+    
 
     # ========================================================
     # TOTAL TIMERS
@@ -567,6 +571,11 @@ def main():
             total_corr_time += (
                 result['corr_time']
             )
+
+            f.log_processed_pair(
+                result['fileA'],
+                result['fileB'],
+                cf.log_file)
 
 
     parallel_time = time.time() - parallel_start

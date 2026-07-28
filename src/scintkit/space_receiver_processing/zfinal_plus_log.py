@@ -179,15 +179,22 @@ def process_s4_file_pair(pair):
 
 
 
+#########################################################################################################################
+
 def main():
-    
-    f.initialize_log(cf.log_file)
     start = time.time()
 
-    print(f'started at {start- start}')
+    f.initialize_log(cf.log_file)
+
+    processing_folder = f.create_processing_scratch(cf.storage_folder, cf.scratch_folder, cf.input_pattern, cf.temp_root, cf.max_workers, cf.verbose)
+    print(f'processing folder returned: \n {processing_folder}')
+
+
+
+
     #create file organization code:
 
-    files = f.find_files(cf.input_directory)
+    files = f.find_files(str(processing_folder))
 
     receiverA_files, receiverB_files = f.org_receivers(files, cf.r_latitude, cf.r_longitude, cf.lat_tol, cf.lon_tol)
 
@@ -255,13 +262,13 @@ def main():
     for day, day_df in cross_cor.groupby(cross_cor['minute'].dt.date):
         day_str = pd.Timestamp(day).strftime('%Y%m%d')
 
-        output_path = output_folder / (f'{base_name}{day_str}'
-                                    f'{lat:.3f}{lat_letter}{lon:.3f}{lon_letter}.pq')
+        output_path = output_folder / (f'{base_name}_{day_str}_'
+                                    f'{lat:.3f}{lat_letter}_{lon:.3f}{lon_letter}.pq')
         day_df.to_parquet(output_path, index = False)
 
         print(f'Saved to {output_path.name}')
 
-
+    f.cleanup_processing_scratch(processing_folder, cf.scratch_folder)
 
     print(f"Total Time: {time.time() - start:.3f} seconds")
 

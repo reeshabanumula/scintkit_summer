@@ -19,7 +19,6 @@ importlib.reload(f)
 importlib.reload(cf)
 
 
-
 #parallel process function
 def process_file_pair(pair):
 
@@ -38,9 +37,6 @@ def process_file_pair(pair):
     rAloc = f.extract_coord(fileA)
     rBloc = f.extract_coord(fileB)
 
-
-    dfa = dfa.sort_values("datetime").reset_index(drop=True)
-    dfb = dfb.sort_values("datetime").reset_index(drop=True)
 
     # filter dfs to contain certain elevation
     dfa = dfa[dfa['elev'] > cf.elevation_filter].copy()
@@ -145,11 +141,13 @@ def process_file_pair(pair):
 
     print(f"Finished {Path(fileA).name}")
 
-    return scint
+    return scint, fileA, fileB
 
 
 def main():
     
+    f.initialize_log(cf.log_file)
+
     start = time.time()
 
     print(f'started at {start- start}')
@@ -190,8 +188,10 @@ def main():
     with ProcessPoolExecutor(max_workers = 2) as executor:
         results = executor.map(process_file_pair, paired_files)
 
-        for scint in results:
+        for scint, fileA, fileB in results:
             all_scint.extend(scint)
+
+            f.log_processed_pair(fileA, fileB, cf.log_file)
 
     # create dataframe storing all scintillation events
     cross_cor = pd.DataFrame(all_scint)
