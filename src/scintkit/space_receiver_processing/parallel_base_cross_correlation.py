@@ -227,6 +227,45 @@ def discover_source_files_by_day() -> dict[date, list[Path]]:
     return group_files_by_filename_day(source_files)
 
 
+def receiver_files_or_skip(
+    files: list[Path],
+) -> tuple[list[Path], list[Path]] | None:
+    """Classify receiver files and honor the configured incomplete-file rule."""
+
+    receiver_a, receiver_b = f.org_receivers(
+        files,
+        cf.r_latitude,
+        cf.r_longitude,
+        cf.lat_tol,
+        cf.lon_tol,
+    )
+    if receiver_a and receiver_b:
+        return receiver_a, receiver_b
+
+    filename_days = sorted(
+        {f.extract_file_datetime(file).strftime("%Y-%m-%d") for file in files}
+    )
+    locations = sorted(
+        {f.extract_coord(file)[:2] for file in files}
+    )
+    location_preview = ", ".join(
+        f"({latitude:.8f}, {longitude:.8f})"
+        for latitude, longitude in locations[:6]
+    )
+    if len(locations) > 6:
+        location_preview += f", ... {len(locations) - 6} more"
+
+    message = (
+        f"filename date(s) {', '.join(filename_days)} contain "
+        f"Receiver A files={len(receiver_a)} and Receiver B candidates="
+        f"{len(receiver_b)}; parsed coordinate magnitudes: {location_preview}"
+    )
+    if cf.unpaired_file_action == "skip":
+        print(f"Skipping incomplete date batch: {message}")
+        return None
+    raise ValueError(f"Processing data must contain both receivers; {message}")
+
+
 def find_file_pairs(
     processing_folder: Path,
     files: list[Path] | None = None,
@@ -235,18 +274,16 @@ def find_file_pairs(
 
     if files is None:
         files = f.find_files(processing_folder)
-    receiver_a, receiver_b = f.org_receivers(
-        files,
-        cf.r_latitude,
-        cf.r_longitude,
-        cf.lat_tol,
-        cf.lon_tol,
-    )
-    if not receiver_a or not receiver_b:
-        raise ValueError("Processing data must contain both receivers.")
+    receiver_files = receiver_files_or_skip(files)
+    if receiver_files is None:
+        return []
+    receiver_a, receiver_b = receiver_files
 
     pairs = f.pair_receiver_files(receiver_a, receiver_b, cf)
     if not pairs:
+        if cf.unpaired_file_action == "skip":
+            print("Skipping date batch: no receiver file pairs matched.")
+            return []
         raise ValueError("No receiver file pairs matched the configuration.")
     return pairs
 
@@ -412,6 +449,10 @@ def process_one_day(
     """Correlate and save one date after all workers return to the parent."""
 
     paired_files = find_file_pairs(processing_folder, files=files)
+    if not paired_files:
+        print(f"No correlation output for skipped date {filename_day}")
+        return [], [], 0
+
     rows, processed_pairs = run_pairs(paired_files)
     output_paths = save_correlations(rows, filename_day=filename_day)
 
@@ -473,6 +514,9 @@ def run(
                 f"\nStarting date batch {batch_number}/"
                 f"{len(source_files_by_day)}: {filename_day}"
             )
+            if receiver_files_or_skip(source_files) is None:
+                continue
+
             processing_folder: Path | None = None
             try:
                 processing_folder = create_cleanable_processing_scratch(
@@ -492,6 +536,12 @@ def run(
                         processing_folder=processing_folder,
                         scratch_folder=cf.scratch_folder,
                     )
+
+    if not all_output_paths:
+        raise RuntimeError(
+            "No daily correlation files were saved. All filename-date "
+            "batches were incomplete, unpaired, or produced no valid rows."
+        )
 
     log_path = write_processed_pairs_log(all_processed_pairs)
     print(f"\nProcessed {len(all_processed_pairs)} total file pairs")

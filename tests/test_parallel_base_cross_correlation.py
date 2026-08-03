@@ -151,6 +151,32 @@ def test_parallel_worker_rows_are_combined_in_parent(monkeypatch):
     assert processed_pairs == file_pairs
 
 
+def test_incomplete_receiver_date_honors_skip_configuration(
+    monkeypatch,
+    capsys,
+):
+    only_receiver_a = Path(
+        "scintpi3_20221004_2000_359060.7812W_72122.4141S_v325_lvl0.pq"
+    )
+    monkeypatch.setattr(cross_correlation.cf, "r_latitude", 7.21224141)
+    monkeypatch.setattr(cross_correlation.cf, "r_longitude", 35.90607812)
+    monkeypatch.setattr(cross_correlation.cf, "lat_tol", 0.0005)
+    monkeypatch.setattr(cross_correlation.cf, "lon_tol", 0.0005)
+    monkeypatch.setattr(
+        cross_correlation.cf,
+        "unpaired_file_action",
+        "skip",
+    )
+
+    result = cross_correlation.receiver_files_or_skip([only_receiver_a])
+
+    assert result is None
+    message = capsys.readouterr().out
+    assert "Skipping incomplete date batch" in message
+    assert "Receiver A files=1" in message
+    assert "Receiver B candidates=0" in message
+
+
 def test_real_process_pool_combines_results_from_four_workers(monkeypatch):
     file_pairs = [
         (Path(f"receiver_a_{index}.pq"), Path(f"receiver_b_{index}.pq"))
@@ -237,6 +263,28 @@ def test_daily_save_combines_all_rows_into_filename_date(tmp_path, monkeypatch):
     assert saved["worker"].tolist() == [0, 1]
 
 
+def test_process_one_day_does_not_write_a_skipped_date(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        cross_correlation,
+        "find_file_pairs",
+        lambda processing_folder, files=None: [],
+    )
+
+    def unexpected_run_pairs(paired_files):
+        raise AssertionError("run_pairs should not run for an incomplete date")
+
+    monkeypatch.setattr(cross_correlation, "run_pairs", unexpected_run_pairs)
+
+    outputs, pairs, row_count = cross_correlation.process_one_day(
+        date(2022, 10, 4),
+        tmp_path,
+    )
+
+    assert outputs == []
+    assert pairs == []
+    assert row_count == 0
+
+
 def test_run_cleans_each_date_before_staging_the_next(tmp_path, monkeypatch):
     first_day = date(2022, 10, 4)
     second_day = date(2022, 10, 5)
@@ -251,6 +299,11 @@ def test_run_cleans_each_date_before_staging_the_next(tmp_path, monkeypatch):
         cross_correlation,
         "discover_source_files_by_day",
         lambda: source_batches,
+    )
+    monkeypatch.setattr(
+        cross_correlation,
+        "receiver_files_or_skip",
+        lambda files: (files, files),
     )
 
     def fake_create(filename_day, source_files):
