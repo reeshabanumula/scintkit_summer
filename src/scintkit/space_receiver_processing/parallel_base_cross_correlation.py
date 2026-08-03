@@ -22,6 +22,7 @@ from datetime import date
 from pathlib import Path
 import tempfile
 from time import perf_counter
+import traceback
 
 import numpy as np
 import pandas as pd
@@ -326,15 +327,6 @@ def save_correlations(
     if correlations.empty:
         raise RuntimeError("No valid scintillation correlations were produced.")
 
-    output_folder = Path(cf.output_folder)
-    output_folder.mkdir(parents=True, exist_ok=True)
-    base_name = Path(cf.cross_correlation_file).stem
-
-    latitude_letter = "N" if cf.r_latitude >= 0 else "S"
-    longitude_letter = "E" if cf.r_longitude >= 0 else "W"
-    latitude = abs(cf.r_latitude)
-    longitude = abs(cf.r_longitude)
-
     if filename_day is None:
         daily_frames = correlations.groupby(correlations["minute"].dt.date)
     else:
@@ -344,12 +336,7 @@ def save_correlations(
 
     output_paths: list[Path] = []
     for output_day, day_frame in daily_frames:
-        day_string = pd.Timestamp(output_day).strftime("%Y%m%d")
-        output_path = output_folder / (
-            f"{base_name}_{day_string}_"
-            f"{latitude:.3f}{latitude_letter}_"
-            f"{longitude:.3f}{longitude_letter}.pq"
-        )
+        output_path = daily_correlation_path(output_day)
         temporary_path = output_path.with_suffix(".pq.tmp")
         try:
             day_frame.to_parquet(temporary_path, index=False)
@@ -357,9 +344,66 @@ def save_correlations(
         finally:
             if temporary_path.exists():
                 temporary_path.unlink()
+
+        error_path = daily_error_path(output_day)
+        if error_path.exists():
+            error_path.unlink()
         output_paths.append(output_path)
 
     return output_paths
+
+
+def daily_correlation_path(filename_day: date) -> Path:
+    """Return the configured correlation filename for one filename date."""
+
+    output_folder = Path(cf.output_folder)
+    output_folder.mkdir(parents=True, exist_ok=True)
+    base_name = Path(cf.cross_correlation_file).stem
+    latitude_letter = "N" if cf.r_latitude >= 0 else "S"
+    longitude_letter = "E" if cf.r_longitude >= 0 else "W"
+
+    return output_folder / (
+        f"{base_name}_{filename_day:%Y%m%d}_"
+        f"{abs(cf.r_latitude):.3f}{latitude_letter}_"
+        f"{abs(cf.r_longitude):.3f}{longitude_letter}.pq"
+    )
+
+
+def daily_error_path(filename_day: date) -> Path:
+    """Return the daily diagnostic path matching the correlation filename."""
+
+    correlation_path = daily_correlation_path(filename_day)
+    return correlation_path.with_name(f"{correlation_path.stem}_err.txt")
+
+
+def write_daily_error(
+    filename_day: date,
+    error: Exception,
+    source_files: list[Path],
+) -> Path:
+    """Atomically write a traceback for one failed date batch."""
+
+    error_path = daily_error_path(filename_day)
+    temporary_path = error_path.with_suffix(".txt.tmp")
+    source_text = "\n".join(f"  {file}" for file in source_files)
+    traceback_text = "".join(
+        traceback.format_exception(type(error), error, error.__traceback__)
+    )
+    text = (
+        f"Filename date: {filename_day:%Y-%m-%d}\n"
+        f"Exception: {type(error).__name__}: {error}\n"
+        f"Source files ({len(source_files)}):\n{source_text}\n\n"
+        f"Traceback:\n{traceback_text}"
+    )
+
+    try:
+        temporary_path.write_text(text, encoding="utf-8")
+        temporary_path.replace(error_path)
+    finally:
+        if temporary_path.exists():
+            temporary_path.unlink()
+
+    return error_path
 
 
 def write_processed_pairs_log(
@@ -471,6 +515,7 @@ def run(
 
     start = perf_counter()
     all_output_paths: list[Path] = []
+    all_error_paths: list[Path] = []
     all_processed_pairs: list[tuple[Path, Path]] = []
     total_rows = 0
 
@@ -486,14 +531,26 @@ def run(
                 )
 
             for filename_day, parquet_files in parquet_files_by_day.items():
-                outputs, pairs, row_count = process_one_day(
-                    filename_day,
-                    processing_folder,
-                    files=parquet_files,
-                )
-                all_output_paths.extend(outputs)
-                all_processed_pairs.extend(pairs)
-                total_rows += row_count
+                try:
+                    outputs, pairs, row_count = process_one_day(
+                        filename_day,
+                        processing_folder,
+                        files=parquet_files,
+                    )
+                    all_output_paths.extend(outputs)
+                    all_processed_pairs.extend(pairs)
+                    total_rows += row_count
+                except Exception as error:
+                    error_path = write_daily_error(
+                        filename_day,
+                        error,
+                        parquet_files,
+                    )
+                    all_error_paths.append(error_path)
+                    print(
+                        f"Date {filename_day} failed; wrote diagnostics to "
+                        f"{error_path}"
+                    )
         finally:
             f.cleanup_processing_scratch(
                 processing_folder=processing_folder,
@@ -514,11 +571,11 @@ def run(
                 f"\nStarting date batch {batch_number}/"
                 f"{len(source_files_by_day)}: {filename_day}"
             )
-            if receiver_files_or_skip(source_files) is None:
-                continue
-
             processing_folder: Path | None = None
             try:
+                if receiver_files_or_skip(source_files) is None:
+                    continue
+
                 processing_folder = create_cleanable_processing_scratch(
                     filename_day,
                     source_files,
@@ -530,6 +587,17 @@ def run(
                 all_output_paths.extend(outputs)
                 all_processed_pairs.extend(pairs)
                 total_rows += row_count
+            except Exception as error:
+                error_path = write_daily_error(
+                    filename_day,
+                    error,
+                    source_files,
+                )
+                all_error_paths.append(error_path)
+                print(
+                    f"Date {filename_day} failed; wrote diagnostics to "
+                    f"{error_path}"
+                )
             finally:
                 if processing_folder is not None:
                     f.cleanup_processing_scratch(
@@ -537,7 +605,7 @@ def run(
                         scratch_folder=cf.scratch_folder,
                     )
 
-    if not all_output_paths:
+    if not all_output_paths and not all_error_paths:
         raise RuntimeError(
             "No daily correlation files were saved. All filename-date "
             "batches were incomplete, unpaired, or produced no valid rows."
@@ -547,6 +615,7 @@ def run(
     print(f"\nProcessed {len(all_processed_pairs)} total file pairs")
     print(f"Saved {total_rows} total correlation rows")
     print(f"Saved {len(all_output_paths)} daily correlation files")
+    print(f"Saved {len(all_error_paths)} daily error files")
     print(f"Saved processed-pairs log to {log_path}")
     print(f"Runtime: {perf_counter() - start:.3f} seconds")
     return all_output_paths, log_path

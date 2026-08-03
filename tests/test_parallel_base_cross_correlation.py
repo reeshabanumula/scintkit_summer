@@ -252,6 +252,8 @@ def test_daily_save_combines_all_rows_into_filename_date(tmp_path, monkeypatch):
         {"minute": pd.Timestamp("2022-10-04 23:59"), "worker": 0},
         {"minute": pd.Timestamp("2022-10-05 00:00"), "worker": 1},
     ]
+    stale_error_path = cross_correlation.daily_error_path(date(2022, 10, 4))
+    stale_error_path.write_text("stale failure", encoding="utf-8")
     output_paths = cross_correlation.save_correlations(
         rows,
         filename_day=date(2022, 10, 4),
@@ -261,6 +263,43 @@ def test_daily_save_combines_all_rows_into_filename_date(tmp_path, monkeypatch):
     assert "20221004" in output_paths[0].name
     saved = pd.read_parquet(output_paths[0])
     assert saved["worker"].tolist() == [0, 1]
+    assert not stale_error_path.exists()
+
+
+def test_daily_error_uses_correlation_name_and_contains_traceback(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        cross_correlation.cf,
+        "output_folder",
+        str(tmp_path),
+    )
+    monkeypatch.setattr(
+        cross_correlation.cf,
+        "cross_correlation_file",
+        "sc003_corrs.pq",
+    )
+    monkeypatch.setattr(cross_correlation.cf, "r_latitude", 7.21224141)
+    monkeypatch.setattr(cross_correlation.cf, "r_longitude", 35.90607812)
+
+    try:
+        raise ValueError("NaN remained in correlation input")
+    except ValueError as error:
+        error_path = cross_correlation.write_daily_error(
+            date(2022, 10, 4),
+            error,
+            [Path("source_a.bin.zip"), Path("source_b.bin.zip")],
+        )
+
+    assert error_path.name == (
+        "sc003_corrs_20221004_7.212N_35.906E_err.txt"
+    )
+    error_text = error_path.read_text(encoding="utf-8")
+    assert "Exception: ValueError: NaN remained" in error_text
+    assert "source_a.bin.zip" in error_text
+    assert "source_b.bin.zip" in error_text
+    assert "Traceback:" in error_text
 
 
 def test_process_one_day_does_not_write_a_skipped_date(tmp_path, monkeypatch):
@@ -354,3 +393,82 @@ def test_run_cleans_each_date_before_staging_the_next(tmp_path, monkeypatch):
         ("cleanup", second_day),
     ]
     assert output_paths == [Path(f"{first_day}.pq"), Path(f"{second_day}.pq")]
+
+
+def test_run_writes_error_and_continues_to_next_date(tmp_path, monkeypatch):
+    failed_day = date(2022, 10, 4)
+    successful_day = date(2022, 10, 5)
+    source_batches = {
+        failed_day: [Path("failed.bin.zip")],
+        successful_day: [Path("successful.bin.zip")],
+    }
+    events: list[tuple[str, date]] = []
+    processing_days: dict[Path, date] = {}
+
+    monkeypatch.setattr(
+        cross_correlation,
+        "discover_source_files_by_day",
+        lambda: source_batches,
+    )
+    monkeypatch.setattr(
+        cross_correlation,
+        "receiver_files_or_skip",
+        lambda files: (files, files),
+    )
+
+    def fake_create(filename_day, source_files):
+        events.append(("stage", filename_day))
+        processing_folder = tmp_path / filename_day.isoformat() / "pq"
+        processing_days[processing_folder] = filename_day
+        return processing_folder
+
+    def fake_process(filename_day, processing_folder, files=None):
+        events.append(("process", filename_day))
+        if filename_day == failed_day:
+            raise ValueError("NaN failure")
+        return [Path(f"{filename_day}.pq")], [
+            (Path("receiver_a.pq"), Path("receiver_b.pq"))
+        ], 1
+
+    def fake_error(filename_day, error, source_files):
+        events.append(("error", filename_day))
+        return tmp_path / f"{filename_day}_err.txt"
+
+    def fake_cleanup(processing_folder, scratch_folder):
+        events.append(("cleanup", processing_days[processing_folder]))
+
+    monkeypatch.setattr(
+        cross_correlation,
+        "create_cleanable_processing_scratch",
+        fake_create,
+    )
+    monkeypatch.setattr(cross_correlation, "process_one_day", fake_process)
+    monkeypatch.setattr(cross_correlation, "write_daily_error", fake_error)
+    monkeypatch.setattr(
+        cross_correlation.f,
+        "cleanup_processing_scratch",
+        fake_cleanup,
+    )
+    monkeypatch.setattr(
+        cross_correlation,
+        "write_processed_pairs_log",
+        lambda pairs: tmp_path / "processed_pairs.txt",
+    )
+    monkeypatch.setattr(
+        cross_correlation.cf,
+        "scratch_folder",
+        str(tmp_path),
+    )
+
+    output_paths, _ = cross_correlation.run()
+
+    assert events == [
+        ("stage", failed_day),
+        ("process", failed_day),
+        ("error", failed_day),
+        ("cleanup", failed_day),
+        ("stage", successful_day),
+        ("process", successful_day),
+        ("cleanup", successful_day),
+    ]
+    assert output_paths == [Path(f"{successful_day}.pq")]

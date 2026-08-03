@@ -1,7 +1,7 @@
 #!/bin/bash
-#SBATCH --job-name=sc002_corr
-#SBATCH --output=/home/igw180000/scratch/sc002_corr_%j.out
-#SBATCH --error=/home/igw180000/scratch/sc002_corr_%j.err
+#SBATCH --job-name=sc003_corr
+#SBATCH --output=/home/igw180000/scratch/sc003_corr_%j.out
+#SBATCH --error=/home/igw180000/scratch/sc003_corr_%j.err
 #SBATCH --partition=rodrigues
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

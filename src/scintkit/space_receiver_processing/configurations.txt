@@ -1,13 +1,13 @@
 ############################################################
-# SC002 PARALLEL BASE CROSS-CORRELATION CONFIGURATION
+# SC003 PARALLEL BASE CROSS-CORRELATION CONFIGURATION
 ############################################################
 
 # Test files (used only by the older single-file debugging scripts).
 Data_folder1 = C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_lvl0\scintpi3_20221004_2000_359060.7812W_72122.4141S_v325_lvl0.pq
 Data_folder2 = C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_lvl0\scintpi3_20221004_2000_359072.7500W_72126.9375S_v325_lvl0.pq
 
-# Directory containing the source SC002 Level-0 bin.zip files.
-input_directory = /titan/frodrigues/scintpi_storage/sc002_bin_files
+# Directory containing the source SC003 Level-0 bin.zip files.
+input_directory = /titan/frodrigues/scintpi_storage/sc003_bin_files
 
 
 ############################################################
@@ -58,7 +58,7 @@ nan_method = drop
 ############################################################
 
 input_pattern = *.bin.zip
-input_root = /titan/frodrigues/scintpi_storage/sc002_bin_files
+input_root = /titan/frodrigues/scintpi_storage/sc003_bin_files
 output_root = /home/igw180000/scratch
 temp_root = /home/igw180000/scratch
 verbose = True
@@ -68,7 +68,7 @@ verbose = True
 # FILE HANDLING
 ############################################################
 
-storage_folder = /titan/frodrigues/scintpi_storage/sc002_bin_files
+storage_folder = /titan/frodrigues/scintpi_storage/sc003_bin_files
 scratch_folder = /home/igw180000/scratch
 
 
@@ -76,8 +76,8 @@ scratch_folder = /home/igw180000/scratch
 # OUTPUT SETTINGS
 ############################################################
 
-output_folder = /home/igw180000/scratch/corrs_sc002
-cross_correlation_file = sc002_corrs.pq
+output_folder = /home/igw180000/scratch/corrs_sc003
+cross_correlation_file = sc003_corrs.pq
 
 
 ############################################################
