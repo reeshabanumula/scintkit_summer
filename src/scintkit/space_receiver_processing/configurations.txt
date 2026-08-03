@@ -1,13 +1,13 @@
 ############################################################
-# DATA FILES
+# SC002 PARALLEL BASE CROSS-CORRELATION CONFIGURATION
 ############################################################
 
-# Test files (used for single-file debugging)
+# Test files (used only by the older single-file debugging scripts).
 Data_folder1 = C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_lvl0\scintpi3_20221004_2000_359060.7812W_72122.4141S_v325_lvl0.pq
 Data_folder2 = C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_lvl0\scintpi3_20221004_2000_359072.7500W_72126.9375S_v325_lvl0.pq
 
-# Directory containing all Level-0 parquet files
-input_directory = /Users/isaac/Documents/crosscorr/data
+# Directory containing the source SC002 Level-0 bin.zip files.
+input_directory = /titan/frodrigues/scintpi_storage/sc002_bin_files
 
 
 ############################################################
@@ -15,31 +15,33 @@ input_directory = /Users/isaac/Documents/crosscorr/data
 ############################################################
 
 s4_threshold = 0.10
+elevation_filter = 10
 
-elevation_filter = 20
-
-
-# Reciever A location
-
-receiver_latitude = 7.21224
-receiver_longitude = 35.90622
+# Receiver A is physically 7.21224141 S, 35.90607812 W.
+# functions.extract_coord currently compares coordinate magnitudes, so these
+# configuration values must remain positive for receiver classification.
+receiver_latitude = 7.21224141
+receiver_longitude = 35.90607812
 reciever_height = 0
 
+# The two receivers differ by about 0.000452 degrees latitude and 0.001197
+# degrees longitude. This tolerance admits small position variation while the
+# longitude test still separates Receiver B.
 latitude_tolerance = 0.0005
 longitude_tolerance = 0.0005
 
-# Reciever B location
-
-receiver_B_latitude = 0
-receiver_B_longitude = 0
+# Receiver B is physically 7.21269375 S, 35.90727500 W. These fields are
+# retained for compatibility, although the current pairing code does not use
+# them to classify files.
+receiver_B_latitude = 7.21269375
+receiver_B_longitude = 35.90727500
 receiver_B_height = 0
-
 
 satellite_altitude = 0
 earth_radius_km = 6371
 
-parallel_process_max_workers = 2
-
+# Must match --cpus-per-task in sc002_parallel_base_cross_correlation.slurm.
+parallel_process_max_workers = 4
 
 
 ############################################################
@@ -48,10 +50,7 @@ parallel_process_max_workers = 2
 
 nan_method = drop
 
-# Options:
-#   "drop"
-#   "interpolate"
-#   "none"
+# Options: drop, interpolate, none
 
 
 ############################################################
@@ -59,49 +58,34 @@ nan_method = drop
 ############################################################
 
 input_pattern = *.bin.zip
-
-input_root = /Users/isaac/Documents/crosscorr/data
-output_root = /Users/isaac/Documents/crosscorr/scratch
-temp_root = /Users/isaac/Documents/crosscorr/scratch
-
+input_root = /titan/frodrigues/scintpi_storage/sc002_bin_files
+output_root = /home/igw180000/scratch
+temp_root = /home/igw180000/scratch
 verbose = True
 
+
 ############################################################
-# file handling process
+# FILE HANDLING
 ############################################################
 
-storage_folder = /Users/isaac/Documents/crosscorr/data
-scratch_folder = /Users/isaac/Documents/crosscorr/scratch
+storage_folder = /titan/frodrigues/scintpi_storage/sc002_bin_files
+scratch_folder = /home/igw180000/scratch
+
 
 ############################################################
 # OUTPUT SETTINGS
 ############################################################
 
-output_folder = /Users/isaac/Documents/crosscorr/corrs
+output_folder = /home/igw180000/scratch/corrs_sc002
+cross_correlation_file = sc002_corrs.pq
 
-cross_correlation_file = _corrs.pq
 
 ############################################################
-# File Pairing Configuration
+# FILE PAIRING
 ############################################################
 
-# How files from Receiver A and Receiver B should be paired.
-# Options:
-#   exact   -> Only pair files with the exact same timestamp/minute.
-#   nearest -> Pair with the closest timestamp within the tolerance. 
-
+# Pair exact timestamps when available, otherwise accept the nearest Receiver
+# B file within one minute. Skip Receiver A files without a valid partner.
 pairing_mode = nearest
-
-
-# Maximum allowed difference when pairing files.
-# Only used when pairing_mode = nearest.
-
 pairing_tolerance = 1
-
-
-# What to do if no valid pair is found.
-# Options:
-#   skip  -> Ignore the unpaired file and continue.
-#   error -> Stop the program and report the missing pair.
-
 unpaired_file_action = skip
