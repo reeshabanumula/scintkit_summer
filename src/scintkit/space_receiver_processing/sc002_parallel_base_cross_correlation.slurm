@@ -24,8 +24,20 @@ export OPENBLAS_NUM_THREADS=1
 export MKL_NUM_THREADS=1
 export NUMEXPR_NUM_THREADS=1
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/../../.." && pwd)"
+# Slurm runs a spool copy of this file, so BASH_SOURCE points under
+# /var/spool/slurm rather than at the checkout. Resolve the program from the
+# directory in which sbatch was invoked.
+if [[ -f "$SLURM_SUBMIT_DIR/src/scintkit/space_receiver_processing/parallel_base_cross_correlation.py" ]]; then
+    PROJECT_ROOT="$SLURM_SUBMIT_DIR"
+    SCRIPT_DIR="$PROJECT_ROOT/src/scintkit/space_receiver_processing"
+elif [[ -f "$SLURM_SUBMIT_DIR/parallel_base_cross_correlation.py" ]]; then
+    SCRIPT_DIR="$SLURM_SUBMIT_DIR"
+    PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/../../.." && pwd)"
+else
+    echo "Could not find parallel_base_cross_correlation.py from: $SLURM_SUBMIT_DIR" >&2
+    echo "Submit from the scintkit_summer root or src/scintkit/space_receiver_processing." >&2
+    exit 2
+fi
 export PYTHONPATH="$PROJECT_ROOT/src"
 
 echo "Job ID: $SLURM_JOB_ID"
