@@ -28,6 +28,8 @@ input_directory = (config['input_directory'])
 #analysis details
 thresh = float(config['s4_threshold'])
 elevation_filter = float(config['elevation_filter'])
+sampling_rate_text = config.get('sampling_rate', '').strip()
+sampling_rate = float(sampling_rate_text) if sampling_rate_text else None
 
 
 r_latitude = float(config['receiver_latitude'])

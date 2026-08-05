@@ -16,6 +16,9 @@ input_directory = /titan/frodrigues/scintpi_storage/sc003_bin_files
 
 s4_threshold = 0.10
 elevation_filter = 10
+# Sampling frequency fs in Hz. When provided, the correlation code uses this
+# value directly instead of estimating it from the receiver timestamps.
+sampling_rate = 20
 
 # Receiver A is physically 7.21224141 S, 35.90607812 W.
 # functions.extract_coord currently compares coordinate magnitudes, so these

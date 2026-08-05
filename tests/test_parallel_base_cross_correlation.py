@@ -26,6 +26,23 @@ def _return_pair_rows(pair):
     return [{"source_a": file_a.name}], file_a, file_b
 
 
+def test_configured_sampling_rate_bypasses_detection(monkeypatch):
+    monkeypatch.setattr(cross_correlation.cf, "sampling_rate", 20.0)
+
+    def unexpected_detection(receiver):
+        raise AssertionError("detect_sampling_rate should not be called")
+
+    monkeypatch.setattr(
+        cross_correlation,
+        "detect_sampling_rate",
+        unexpected_detection,
+    )
+
+    result = cross_correlation.sampling_rate_hz(pd.DataFrame())
+
+    assert result == 20.0
+
+
 def test_discover_source_files_groups_filename_dates(tmp_path, monkeypatch):
     filenames = [
         "scintpi3_20221005_0000_359060.7812W_72122.4141S_v325.bin.zip",

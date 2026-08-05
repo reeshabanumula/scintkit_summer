@@ -12,6 +12,7 @@ This is the winning "parallel + baseline" method:
 
 - S4 event selection occurs after the full receiver merge.
 - Cross-correlation uses ``numpy.correlate``.
+- Configured ``sampling_rate`` takes precedence over automatic detection.
 - ``parallel_process_max_workers`` controls the worker count.
 """
 
@@ -38,6 +39,19 @@ from scintkit.services.phase_detrend import detect_sampling_rate
 
 MERGE_KEYS = ["datetime", "svid", "cons"]
 MIN_SAMPLES = 10
+
+
+def sampling_rate_hz(receiver: pd.DataFrame) -> float:
+    """Return configured sampling rate, falling back to timestamp detection."""
+
+    configured_rate = getattr(cf, "sampling_rate", None)
+    if configured_rate is not None:
+        configured_rate = float(configured_rate)
+        if configured_rate <= 0:
+            raise ValueError("Configured sampling_rate must be greater than 0.")
+        return configured_rate
+
+    return float(detect_sampling_rate(receiver))
 
 
 def normalized_numpy_correlation(
@@ -108,7 +122,7 @@ def process_file_pair(
 
     receiver_a = temp_formating(receiver_a)
     receiver_b = temp_formating(receiver_b)
-    sampling_rate = detect_sampling_rate(receiver_a)
+    sampling_rate = sampling_rate_hz(receiver_a)
     seconds_per_sample = 1 / sampling_rate
 
     merged = receiver_a.merge(
