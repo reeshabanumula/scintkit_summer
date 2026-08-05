@@ -3,6 +3,7 @@
 #SBATCH --output=/home/igw180000/scratch/sc003_corr_%A_%a.out
 #SBATCH --error=/home/igw180000/scratch/sc003_corr_%A_%a.err
 #SBATCH --partition=rodrigues,cpu-preempt
+#SBATCH --exclude=c-05-08
 # Four array tasks run at once. Each task owns a disjoint shard of whole days.
 #SBATCH --array=0-3%4
 #SBATCH --nodes=1

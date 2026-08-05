@@ -80,7 +80,7 @@ scratch_folder = /home/igw180000/scratch
 # OUTPUT SETTINGS
 ############################################################
 
-output_folder = /home/igw180000/scratch/corrs_sc003
+output_folder = /titan/frodrigues/corrs_sc003
 cross_correlation_file = sc003_corrs.pq
 
 
