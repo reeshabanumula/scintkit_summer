@@ -40,7 +40,8 @@ receiver_B_height = 0
 satellite_altitude = 0
 earth_radius_km = 6371
 
-# Must match --cpus-per-task in sc002_parallel_base_cross_correlation.slurm.
+# Four local workers run inside each Slurm array task. This must match
+# --cpus-per-task in sc002_parallel_base_cross_correlation.slurm.
 parallel_process_max_workers = 4
 
 

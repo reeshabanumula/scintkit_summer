@@ -49,6 +49,42 @@ def test_discover_source_files_groups_filename_dates(tmp_path, monkeypatch):
     ]
 
 
+def test_date_shards_are_disjoint_and_preserve_whole_days():
+    files_by_day = {
+        date(2022, 10, day): [Path(f"day_{day}.bin.zip")]
+        for day in range(1, 9)
+    }
+
+    shards = [
+        cross_correlation.select_date_shard(files_by_day, index, 4)
+        for index in range(4)
+    ]
+
+    assert [list(shard) for shard in shards] == [
+        [date(2022, 10, 1), date(2022, 10, 5)],
+        [date(2022, 10, 2), date(2022, 10, 6)],
+        [date(2022, 10, 3), date(2022, 10, 7)],
+        [date(2022, 10, 4), date(2022, 10, 8)],
+    ]
+    assert set().union(*(set(shard) for shard in shards)) == set(files_by_day)
+
+
+def test_processed_pairs_logs_are_unique_per_date_shard(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        cross_correlation.cf,
+        "log_file",
+        tmp_path / "processed_pairs.txt",
+    )
+
+    first_log = cross_correlation.write_processed_pairs_log([], 0, 4)
+    fourth_log = cross_correlation.write_processed_pairs_log([], 3, 4)
+
+    assert first_log.name == "processed_pairs_shard_01_of_04.txt"
+    assert fourth_log.name == "processed_pairs_shard_04_of_04.txt"
+    assert first_log.exists()
+    assert fourth_log.exists()
+
+
 def test_daily_conversion_uses_only_batch_files_and_all_workers(
     tmp_path,
     monkeypatch,
@@ -374,7 +410,7 @@ def test_run_cleans_each_date_before_staging_the_next(tmp_path, monkeypatch):
     monkeypatch.setattr(
         cross_correlation,
         "write_processed_pairs_log",
-        lambda pairs: tmp_path / "processed_pairs.txt",
+        lambda pairs, **kwargs: tmp_path / "processed_pairs.txt",
     )
     monkeypatch.setattr(
         cross_correlation.cf,
@@ -452,7 +488,7 @@ def test_run_writes_error_and_continues_to_next_date(tmp_path, monkeypatch):
     monkeypatch.setattr(
         cross_correlation,
         "write_processed_pairs_log",
-        lambda pairs: tmp_path / "processed_pairs.txt",
+        lambda pairs, **kwargs: tmp_path / "processed_pairs.txt",
     )
     monkeypatch.setattr(
         cross_correlation.cf,
@@ -472,3 +508,66 @@ def test_run_writes_error_and_continues_to_next_date(tmp_path, monkeypatch):
         ("cleanup", successful_day),
     ]
     assert output_paths == [Path(f"{successful_day}.pq")]
+
+
+def test_run_processes_only_the_assigned_date_shard(tmp_path, monkeypatch):
+    days = [date(2022, 10, day) for day in range(1, 5)]
+    source_batches = {
+        filename_day: [Path(f"{filename_day}.bin.zip")]
+        for filename_day in days
+    }
+    processed_days: list[date] = []
+    processing_days: dict[Path, date] = {}
+    log_arguments: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        cross_correlation,
+        "discover_source_files_by_day",
+        lambda: source_batches,
+    )
+    monkeypatch.setattr(
+        cross_correlation,
+        "receiver_files_or_skip",
+        lambda files: (files, files),
+    )
+
+    def fake_create(filename_day, source_files):
+        processing_folder = tmp_path / filename_day.isoformat() / "pq"
+        processing_days[processing_folder] = filename_day
+        return processing_folder
+
+    def fake_process(filename_day, processing_folder, files=None):
+        processed_days.append(filename_day)
+        return [Path(f"{filename_day}.pq")], [], 1
+
+    def fake_log(pairs, **kwargs):
+        log_arguments.update(kwargs)
+        return tmp_path / "processed_pairs_shard_02_of_02.txt"
+
+    monkeypatch.setattr(
+        cross_correlation,
+        "create_cleanable_processing_scratch",
+        fake_create,
+    )
+    monkeypatch.setattr(cross_correlation, "process_one_day", fake_process)
+    monkeypatch.setattr(
+        cross_correlation.f,
+        "cleanup_processing_scratch",
+        lambda processing_folder, scratch_folder: None,
+    )
+    monkeypatch.setattr(
+        cross_correlation,
+        "write_processed_pairs_log",
+        fake_log,
+    )
+    monkeypatch.setattr(
+        cross_correlation.cf,
+        "scratch_folder",
+        str(tmp_path),
+    )
+
+    output_paths, _ = cross_correlation.run(shard_index=1, shard_count=2)
+
+    assert processed_days == [days[1], days[3]]
+    assert output_paths == [Path(f"{days[1]}.pq"), Path(f"{days[3]}.pq")]
+    assert log_arguments == {"shard_index": 1, "shard_count": 2}

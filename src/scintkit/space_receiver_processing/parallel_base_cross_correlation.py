@@ -1,11 +1,12 @@
 """Production receiver cross-correlation using NumPy and configured workers.
 
 Configuration is read from ``configurations.txt`` through ``CONFIG.py``.
-Source files are grouped by the date in each filename. One date at a time is
-converted into a unique ``scratch_folder/run_<date>_*`` directory, correlated,
-saved as one daily result, and removed before the next date begins. Conversion
-and correlation both use the configured worker count, but only the parent
-process combines rows and writes the daily result.
+Source files are grouped by the date in each filename. Slurm array tasks can
+split those dates into disjoint shards. Within each shard, one date at a time
+is converted into a unique ``scratch_folder/run_<date>_*`` directory,
+correlated, saved as one daily result, and removed before the next date begins.
+Conversion and correlation both use the configured worker count, but only the
+parent process combines rows and writes the daily result.
 
 This is the winning "parallel + baseline" method:
 
@@ -228,6 +229,25 @@ def discover_source_files_by_day() -> dict[date, list[Path]]:
     return group_files_by_filename_day(source_files)
 
 
+def select_date_shard(
+    files_by_day: dict[date, list[Path]],
+    shard_index: int,
+    shard_count: int,
+) -> dict[date, list[Path]]:
+    """Select one deterministic, round-robin shard of whole filename dates."""
+
+    if shard_count < 1:
+        raise ValueError("shard_count must be at least 1")
+    if not 0 <= shard_index < shard_count:
+        raise ValueError(
+            f"shard_index must be between 0 and {shard_count - 1}; "
+            f"received {shard_index}"
+        )
+
+    ordered_days = list(sorted(files_by_day.items()))
+    return dict(ordered_days[shard_index::shard_count])
+
+
 def receiver_files_or_skip(
     files: list[Path],
 ) -> tuple[list[Path], list[Path]] | None:
@@ -408,10 +428,17 @@ def write_daily_error(
 
 def write_processed_pairs_log(
     processed_pairs: list[tuple[Path, Path]],
+    shard_index: int = 0,
+    shard_count: int = 1,
 ) -> Path:
-    """Write a fresh log only after all correlation files are saved."""
+    """Write a fresh, collision-free log for one date shard."""
 
     log_path = Path(cf.log_file)
+    if shard_count > 1:
+        log_path = log_path.with_name(
+            f"{log_path.stem}_shard_{shard_index + 1:02d}_"
+            f"of_{shard_count:02d}{log_path.suffix}"
+        )
     log_path.parent.mkdir(parents=True, exist_ok=True)
     text = "".join(
         f"{file_a.name},{file_b.name}\n"
@@ -510,14 +537,24 @@ def process_one_day(
 
 def run(
     existing_processing_folder: Path | None = None,
+    *,
+    shard_index: int = 0,
+    shard_count: int = 1,
 ) -> tuple[list[Path], Path]:
-    """Process sequential filename-date batches with parallel work per date."""
+    """Process one shard of dates sequentially with parallel work per date."""
 
     start = perf_counter()
     all_output_paths: list[Path] = []
     all_error_paths: list[Path] = []
     all_processed_pairs: list[tuple[Path, Path]] = []
     total_rows = 0
+
+    # Existing scratch recovery owns and removes one shared run directory, so
+    # it must remain a single-process operation.
+    if existing_processing_folder is not None and shard_count != 1:
+        raise ValueError(
+            "Date sharding cannot be combined with --processing-folder."
+        )
 
     if existing_processing_folder is not None:
         processing_folder = existing_processing_folder.resolve()
@@ -557,11 +594,31 @@ def run(
                 scratch_folder=cf.scratch_folder,
             )
     else:
-        source_files_by_day = discover_source_files_by_day()
-        print(
-            f"Discovered {sum(map(len, source_files_by_day.values()))} "
-            f"source files across {len(source_files_by_day)} dates"
+        all_source_files_by_day = discover_source_files_by_day()
+        source_files_by_day = select_date_shard(
+            all_source_files_by_day,
+            shard_index,
+            shard_count,
         )
+        print(
+            f"Discovered {sum(map(len, all_source_files_by_day.values()))} "
+            f"source files across {len(all_source_files_by_day)} dates"
+        )
+        print(
+            f"Date shard {shard_index + 1}/{shard_count} was assigned "
+            f"{len(source_files_by_day)} dates and "
+            f"{sum(map(len, source_files_by_day.values()))} source files"
+        )
+
+        if not source_files_by_day:
+            log_path = write_processed_pairs_log(
+                [],
+                shard_index=shard_index,
+                shard_count=shard_count,
+            )
+            print("This shard has no filename dates to process.")
+            print(f"Saved empty processed-pairs log to {log_path}")
+            return [], log_path
 
         for batch_number, (filename_day, source_files) in enumerate(
             source_files_by_day.items(),
@@ -611,7 +668,11 @@ def run(
             "batches were incomplete, unpaired, or produced no valid rows."
         )
 
-    log_path = write_processed_pairs_log(all_processed_pairs)
+    log_path = write_processed_pairs_log(
+        all_processed_pairs,
+        shard_index=shard_index,
+        shard_count=shard_count,
+    )
     print(f"\nProcessed {len(all_processed_pairs)} total file pairs")
     print(f"Saved {total_rows} total correlation rows")
     print(f"Saved {len(all_output_paths)} daily correlation files")
@@ -633,8 +694,24 @@ def main() -> None:
             "after processing. Normally omitted."
         ),
     )
+    parser.add_argument(
+        "--shard-index",
+        type=int,
+        default=0,
+        help="Zero-based date-shard index. Slurm array tasks pass their task ID.",
+    )
+    parser.add_argument(
+        "--shard-count",
+        type=int,
+        default=1,
+        help="Total number of disjoint date shards.",
+    )
     arguments = parser.parse_args()
-    run(arguments.processing_folder)
+    run(
+        arguments.processing_folder,
+        shard_index=arguments.shard_index,
+        shard_count=arguments.shard_count,
+    )
 
 
 if __name__ == "__main__":

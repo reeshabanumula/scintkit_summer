@@ -1,12 +1,15 @@
 #!/bin/bash
 #SBATCH --job-name=sc003_corr
-#SBATCH --output=/home/igw180000/scratch/sc003_corr_%j.out
-#SBATCH --error=/home/igw180000/scratch/sc003_corr_%j.err
-#SBATCH --partition=rodrigues
+#SBATCH --output=/home/igw180000/scratch/sc003_corr_%A_%a.out
+#SBATCH --error=/home/igw180000/scratch/sc003_corr_%A_%a.err
+#SBATCH --partition=rodrigues,cpu-preempt
+# Four array tasks run at once. Each task owns a disjoint shard of whole days.
+#SBATCH --array=0-3%4
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=32G
+# Reserve all configured memory on whichever node runs this array task.
+#SBATCH --mem=0
 #SBATCH --time=48:00:00
 
 set -euo pipefail
@@ -41,9 +44,14 @@ fi
 export PYTHONPATH="$PROJECT_ROOT/src"
 
 echo "Job ID: $SLURM_JOB_ID"
+echo "Array job ID: $SLURM_ARRAY_JOB_ID"
+echo "Array task: $SLURM_ARRAY_TASK_ID/$SLURM_ARRAY_TASK_COUNT"
 echo "Node: $(hostname)"
 echo "CPUs: $SLURM_CPUS_PER_TASK"
+echo "Allocated memory: ${SLURM_MEM_PER_NODE:-all node memory}"
 echo "Project: $PROJECT_ROOT"
 
 cd "$PROJECT_ROOT"
-python -u "$SCRIPT_DIR/parallel_base_cross_correlation.py"
+python -u "$SCRIPT_DIR/parallel_base_cross_correlation.py" \
+    --shard-index "$SLURM_ARRAY_TASK_ID" \
+    --shard-count "$SLURM_ARRAY_TASK_COUNT"
