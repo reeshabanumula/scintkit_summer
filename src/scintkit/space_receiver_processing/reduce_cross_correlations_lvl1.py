@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
+from scipy import signal
 
 
 DEFAULT_INPUT_DIR = Path("/titan/frodrigues/corrs_sc003")
@@ -251,6 +252,150 @@ def first_positive_crossing_time(
     return float("nan")
 
 
+def normalized_max_cross_correlation(
+    first: np.ndarray,
+    second: np.ndarray,
+) -> float:
+    """Return the maximum normalized cross-correlation of two functions."""
+
+    first = np.asarray(first, dtype=float)
+    second = np.asarray(second, dtype=float)
+    if (
+        len(first) == 0
+        or len(second) == 0
+        or not np.all(np.isfinite(first))
+        or not np.all(np.isfinite(second))
+    ):
+        return float("nan")
+
+    first_centered = first - np.mean(first)
+    second_centered = second - np.mean(second)
+    denominator = (
+        np.linalg.norm(first_centered) * np.linalg.norm(second_centered)
+    )
+    if not np.isfinite(denominator) or denominator == 0:
+        return float("nan")
+
+    correlation = signal.correlate(
+        first_centered,
+        second_centered,
+        mode="full",
+        method="fft",
+    )
+    return float(np.max(correlation / denominator))
+
+
+def paired_autocorrelation_metrics(
+    parquet_file: pq.ParquetFile,
+    column_a: str,
+    column_b: str,
+    max_cross: np.ndarray,
+    sample_seconds: np.ndarray,
+    batch_size: int,
+) -> tuple[np.ndarray, ...]:
+    """Calculate receiver metrics and correlation between both ACFs."""
+
+    lag_zero_a: list[float] = []
+    decorrelation_a: list[float] = []
+    at_max_cross_a: list[float] = []
+    lag_zero_b: list[float] = []
+    decorrelation_b: list[float] = []
+    at_max_cross_b: list[float] = []
+    max_auto_cross: list[float] = []
+
+    row_index = 0
+    for batch in parquet_file.iter_batches(
+        batch_size=batch_size,
+        columns=[column_a, column_b],
+        use_threads=False,
+    ):
+        values_a = batch.column(0).to_pylist()
+        values_b = batch.column(1).to_pylist()
+        for value_a, value_b in zip(values_a, values_b, strict=True):
+            if row_index >= len(max_cross):
+                raise ValueError(
+                    f"{column_a}/{column_b} contain more rows than scalars"
+                )
+            arrays: list[np.ndarray | None] = []
+            for column, value in (
+                (column_a, value_a),
+                (column_b, value_b),
+            ):
+                if value is None:
+                    arrays.append(None)
+                    continue
+                correlation = np.asarray(value, dtype=float)
+                if len(correlation) % 2 != 1:
+                    raise ValueError(
+                        f"{column} must have odd-length full correlations; "
+                        f"got {len(correlation)}"
+                    )
+                arrays.append(correlation)
+
+            for correlation, lag_zero, decorrelation, at_max_cross in (
+                (
+                    arrays[0],
+                    lag_zero_a,
+                    decorrelation_a,
+                    at_max_cross_a,
+                ),
+                (
+                    arrays[1],
+                    lag_zero_b,
+                    decorrelation_b,
+                    at_max_cross_b,
+                ),
+            ):
+                if correlation is None:
+                    lag_zero.append(np.nan)
+                    decorrelation.append(np.nan)
+                    at_max_cross.append(np.nan)
+                    continue
+                lag_zero.append(
+                    float(correlation[len(correlation) // 2])
+                )
+                decorrelation.append(
+                    first_positive_crossing_time(
+                        correlation,
+                        1 / np.e,
+                        sample_seconds[row_index],
+                    )
+                )
+                at_max_cross.append(
+                    first_positive_crossing_time(
+                        correlation,
+                        max_cross[row_index],
+                        sample_seconds[row_index],
+                    )
+                )
+
+            if arrays[0] is None or arrays[1] is None:
+                max_auto_cross.append(np.nan)
+            else:
+                max_auto_cross.append(
+                    normalized_max_cross_correlation(arrays[0], arrays[1])
+                )
+            row_index += 1
+
+    if row_index != len(max_cross):
+        raise ValueError(
+            f"{column_a}/{column_b} contain {row_index} rows; "
+            f"expected {len(max_cross)}"
+        )
+    return tuple(
+        np.asarray(values)
+        for values in (
+            lag_zero_a,
+            decorrelation_a,
+            at_max_cross_a,
+            lag_zero_b,
+            decorrelation_b,
+            at_max_cross_b,
+            max_auto_cross,
+        )
+    )
+
+
 def autocorrelation_metrics(
     parquet_file: pq.ParquetFile,
     column: str,
@@ -359,6 +504,49 @@ def add_channel_metrics(
         frame[max_column],
         errors="coerce",
     ).to_numpy(float)
+
+    auto_a = f"auto_cor_A_{channel}"
+    auto_b = f"auto_cor_B_{channel}"
+    if auto_a in names and auto_b in names:
+        (
+            lag_zero_a,
+            decorrelation_a,
+            at_max_cross_a,
+            lag_zero_b,
+            decorrelation_b,
+            at_max_cross_b,
+            max_auto_cross,
+        ) = paired_autocorrelation_metrics(
+            parquet_file,
+            auto_a,
+            auto_b,
+            max_cross,
+            sample_seconds,
+            batch_size,
+        )
+        frame[f"auto_cor_A_max_{channel}"] = lag_zero_a
+        frame[f"decorrelation_time_A_{channel}"] = decorrelation_a
+        frame[
+            f"auto_cor_A_time_at_max_corr_{channel}"
+        ] = at_max_cross_a
+        frame[f"auto_cor_B_max_{channel}"] = lag_zero_b
+        frame[f"decorrelation_time_B_{channel}"] = decorrelation_b
+        frame[
+            f"auto_cor_B_time_at_max_corr_{channel}"
+        ] = at_max_cross_b
+        frame[f"max_auto_cross_corr_{channel}"] = max_auto_cross
+        del (
+            lag_zero_a,
+            decorrelation_a,
+            at_max_cross_a,
+            lag_zero_b,
+            decorrelation_b,
+            at_max_cross_b,
+            max_auto_cross,
+        )
+        gc.collect()
+        return
+
     for receiver in ("A", "B"):
         auto_column = f"auto_cor_{receiver}_{channel}"
         if auto_column not in names:
@@ -377,6 +565,48 @@ def add_channel_metrics(
         ] = at_max_cross
         del lag_zero, decorrelation, at_max_cross
         gc.collect()
+
+
+def required_output_columns(schema: pa.Schema) -> set[str]:
+    """Return derived columns required for an output to be restart-safe."""
+
+    names = set(schema.names)
+    required: set[str] = set()
+    for coordinate in COORDINATE_COLUMNS:
+        if coordinate in names:
+            required.update(
+                {
+                    f"{coordinate}_lat",
+                    f"{coordinate}_lon",
+                    f"{coordinate}_height",
+                }
+            )
+    for channel in channel_suffixes(schema):
+        for receiver in ("A", "B"):
+            if f"auto_cor_{receiver}_{channel}" in names:
+                required.update(
+                    {
+                        f"auto_cor_{receiver}_max_{channel}",
+                        f"decorrelation_time_{receiver}_{channel}",
+                        f"auto_cor_{receiver}_time_at_max_corr_{channel}",
+                    }
+                )
+        if (
+            f"auto_cor_A_{channel}" in names
+            and f"auto_cor_B_{channel}" in names
+        ):
+            required.add(f"max_auto_cross_corr_{channel}")
+    return required
+
+
+def existing_output_is_current(source: Path, output: Path) -> bool:
+    """Return whether an existing output contains the current data contract."""
+
+    if not output.exists() or output.stat().st_mtime < source.stat().st_mtime:
+        return False
+    source_schema = pq.read_schema(source)
+    output_schema = pq.read_schema(output)
+    return required_output_columns(source_schema).issubset(output_schema.names)
 
 
 def write_parquet_atomic(frame: pd.DataFrame, output: Path) -> None:
@@ -410,7 +640,7 @@ def reduce_file(
 ) -> ReductionResult:
     """Reduce one raw correlation file to a scalar-only level-1 file."""
 
-    if output.exists() and not overwrite:
+    if not overwrite and existing_output_is_current(source, output):
         metadata = pq.ParquetFile(output).metadata
         return ReductionResult(
             source=source,

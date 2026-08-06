@@ -8,6 +8,7 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
+from scipy import signal
 
 
 MODULE_DIR = (
@@ -93,6 +94,23 @@ def test_reduce_file_flattens_coordinates_and_calculates_crossings(tmp_path):
     assert reduced.loc[
         0, "auto_cor_B_time_at_max_corr_1"
     ] == pytest.approx(0.0375)
+    auto_a = np.asarray([0.2, 0.5, 1.0, 0.5, 0.2])
+    auto_b = np.asarray([0.3, 0.6, 1.0, 0.6, 0.3])
+    expected_auto_cross = np.max(
+        signal.correlate(
+            auto_a - auto_a.mean(),
+            auto_b - auto_b.mean(),
+            mode="full",
+            method="direct",
+        )
+        / (
+            np.linalg.norm(auto_a - auto_a.mean())
+            * np.linalg.norm(auto_b - auto_b.mean())
+        )
+    )
+    assert reduced.loc[0, "max_auto_cross_corr_1"] == pytest.approx(
+        expected_auto_cross
+    )
 
     output_schema = pq.read_schema(output)
     assert not any(
@@ -135,6 +153,8 @@ def test_run_reduces_all_sources_and_combines_union_schema(tmp_path):
     ]
     assert pd.isna(combined.loc[0, "decorrelation_time_A_2"])
     assert np.isfinite(combined.loc[1, "decorrelation_time_A_2"])
+    assert pd.isna(combined.loc[0, "max_auto_cross_corr_2"])
+    assert np.isfinite(combined.loc[1, "max_auto_cross_corr_2"])
     assert not any(
         reducer.is_list_type(field.type)
         for field in pq.read_schema(combined_path)
@@ -168,3 +188,16 @@ def test_combined_output_is_not_treated_as_an_input(tmp_path):
     discovered = reducer.discover_input_files(tmp_path, "*.pq")
 
     assert discovered == [source]
+
+
+def test_old_output_is_rebuilt_when_new_metric_is_missing(tmp_path):
+    source = tmp_path / "sc003_corrs_20230501.pq"
+    output = tmp_path / "lvl1" / "sc003_corrs_20230501_lvl1.pq"
+    write_raw_correlation(source)
+    output.parent.mkdir()
+    pd.DataFrame({"source_a": ["old"]}).to_parquet(output, index=False)
+
+    result = reducer.reduce_file(source, output)
+
+    assert result.status == "written"
+    assert "max_auto_cross_corr_1" in pq.read_schema(output).names
