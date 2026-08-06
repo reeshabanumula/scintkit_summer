@@ -57,9 +57,9 @@ def write_raw_correlation(path: Path, include_channel_2: bool = False) -> None:
 
 
 def test_reduce_file_flattens_coordinates_and_calculates_crossings(tmp_path):
-    source = tmp_path / "sc003_corrs_20230501_7.212N_35.906E.pq"
+    source = tmp_path / "sc003_corrs_20230501_7.212S_35.906W.pq"
     output = tmp_path / "lvl1" / (
-        "sc003_corrs_20230501_7.212N_35.906E_lvl1.pq"
+        "sc003_corrs_20230501_7.212S_35.906W_lvl1.pq"
     )
     write_raw_correlation(source)
 
@@ -129,8 +129,8 @@ def test_reduce_file_flattens_coordinates_and_calculates_crossings(tmp_path):
 
 
 def test_run_reduces_all_sources_and_combines_union_schema(tmp_path):
-    first = tmp_path / "sc003_corrs_20230501_7.212N_35.906E.pq"
-    second = tmp_path / "sc003_corrs_20230502_7.212N_35.906E.pq"
+    first = tmp_path / "sc003_corrs_20230501_7.212S_35.906W.pq"
+    second = tmp_path / "sc003_corrs_20230502_7.212S_35.906W.pq"
     write_raw_correlation(first)
     write_raw_correlation(second, include_channel_2=True)
 

@@ -21,10 +21,9 @@ elevation_filter = 10
 sampling_rate = 20
 
 # Receiver A is physically 7.21224141 S, 35.90607812 W.
-# functions.extract_coord currently compares coordinate magnitudes, so these
-# configuration values must remain positive for receiver classification.
-receiver_latitude = 7.21224141
-receiver_longitude = 35.90607812
+# South and west coordinates are negative.
+receiver_latitude = -7.21224141
+receiver_longitude = -35.90607812
 reciever_height = 0
 
 # The two receivers differ by about 0.000452 degrees latitude and 0.001197
@@ -36,8 +35,8 @@ longitude_tolerance = 0.0005
 # Receiver B is physically 7.21269375 S, 35.90727500 W. These fields are
 # retained for compatibility, although the current pairing code does not use
 # them to classify files.
-receiver_B_latitude = 7.21269375
-receiver_B_longitude = 35.90727500
+receiver_B_latitude = -7.21269375
+receiver_B_longitude = -35.90727500
 receiver_B_height = 0
 
 satellite_altitude = 0

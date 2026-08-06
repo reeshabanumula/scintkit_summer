@@ -27,6 +27,25 @@ def _return_pair_rows(pair):
     return [{"source_a": file_a.name}], file_a, file_b
 
 
+@pytest.mark.parametrize(
+    ("filename", "expected"),
+    [
+        (
+            "receiver_359060.7812W_72122.4141S_data.pq",
+            (-7.21224141, -35.90607812, 0),
+        ),
+        (
+            "receiver_359060.7812E_72122.4141N_data.pq",
+            (7.21224141, 35.90607812, 0),
+        ),
+    ],
+)
+def test_extract_coord_applies_hemisphere_signs(filename, expected):
+    assert cross_correlation.f.extract_coord(Path(filename)) == pytest.approx(
+        expected
+    )
+
+
 def test_configured_sampling_rate_bypasses_detection(monkeypatch):
     monkeypatch.setattr(cross_correlation.cf, "sampling_rate", 20.0)
 
@@ -305,8 +324,8 @@ def test_incomplete_receiver_date_honors_skip_configuration(
     only_receiver_a = Path(
         "scintpi3_20221004_2000_359060.7812W_72122.4141S_v325_lvl0.pq"
     )
-    monkeypatch.setattr(cross_correlation.cf, "r_latitude", 7.21224141)
-    monkeypatch.setattr(cross_correlation.cf, "r_longitude", 35.90607812)
+    monkeypatch.setattr(cross_correlation.cf, "r_latitude", -7.21224141)
+    monkeypatch.setattr(cross_correlation.cf, "r_longitude", -35.90607812)
     monkeypatch.setattr(cross_correlation.cf, "lat_tol", 0.0005)
     monkeypatch.setattr(cross_correlation.cf, "lon_tol", 0.0005)
     monkeypatch.setattr(
@@ -392,8 +411,8 @@ def test_daily_save_combines_all_rows_into_filename_date(tmp_path, monkeypatch):
         "cross_correlation_file",
         "sc002_corrs.pq",
     )
-    monkeypatch.setattr(cross_correlation.cf, "r_latitude", 7.21224141)
-    monkeypatch.setattr(cross_correlation.cf, "r_longitude", 35.90607812)
+    monkeypatch.setattr(cross_correlation.cf, "r_latitude", -7.21224141)
+    monkeypatch.setattr(cross_correlation.cf, "r_longitude", -35.90607812)
 
     rows = [
         {"minute": pd.Timestamp("2022-10-04 23:59"), "worker": 0},
@@ -407,7 +426,9 @@ def test_daily_save_combines_all_rows_into_filename_date(tmp_path, monkeypatch):
     )
 
     assert len(output_paths) == 1
-    assert "20221004" in output_paths[0].name
+    assert output_paths[0].name == (
+        "sc002_corrs_20221004_7.212S_35.906W.pq"
+    )
     saved = pd.read_parquet(output_paths[0])
     assert saved["worker"].tolist() == [0, 1]
     assert not stale_error_path.exists()
@@ -427,8 +448,8 @@ def test_daily_error_uses_correlation_name_and_contains_traceback(
         "cross_correlation_file",
         "sc003_corrs.pq",
     )
-    monkeypatch.setattr(cross_correlation.cf, "r_latitude", 7.21224141)
-    monkeypatch.setattr(cross_correlation.cf, "r_longitude", 35.90607812)
+    monkeypatch.setattr(cross_correlation.cf, "r_latitude", -7.21224141)
+    monkeypatch.setattr(cross_correlation.cf, "r_longitude", -35.90607812)
 
     try:
         raise ValueError("NaN remained in correlation input")
@@ -440,7 +461,7 @@ def test_daily_error_uses_correlation_name_and_contains_traceback(
         )
 
     assert error_path.name == (
-        "sc003_corrs_20221004_7.212N_35.906E_err.txt"
+        "sc003_corrs_20221004_7.212S_35.906W_err.txt"
     )
     error_text = error_path.read_text(encoding="utf-8")
     assert "Exception: ValueError: NaN remained" in error_text

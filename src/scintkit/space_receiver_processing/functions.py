@@ -109,6 +109,11 @@ def extract_coord (file, height = 0):
     longitude = float(match.group(1)) / 10000
     latitude = float(match.group(3)) / 10000
 
+    if match.group(2) == "W":
+        longitude = -longitude
+    if match.group(4) == "S":
+        latitude = -latitude
+
     return latitude, longitude, height
 
 def org_receivers(files, reference_lat, reference_lon, lat_tol, lon_tol):

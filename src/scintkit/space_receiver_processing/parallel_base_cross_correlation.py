@@ -421,7 +421,7 @@ def receiver_files_or_skip(
     message = (
         f"filename date(s) {', '.join(filename_days)} contain "
         f"Receiver A files={len(receiver_a)} and Receiver B candidates="
-        f"{len(receiver_b)}; parsed coordinate magnitudes: {location_preview}"
+        f"{len(receiver_b)}; parsed coordinates: {location_preview}"
     )
     if cf.unpaired_file_action == "skip":
         print(f"Skipping incomplete date batch: {message}")
