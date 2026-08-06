@@ -43,7 +43,7 @@ is_sbas_136 = (
     | prn.isin(['G10', 'SBAS136'])
 )
 
-df_sbas136 = df[is_sbas_136].copy()
+df_sbas136 = df.copy()
 if df_sbas136.empty:
     available = sorted(df['prn'].dropna().astype(str).unique())
     raise ValueError(
@@ -102,30 +102,76 @@ def plot_date_ut(
     cmap,
     limits,
     title,
-    marker_size=8,
+    time_bin_minutes=1,
     extend='neither',
     colorbar_ticks=None,
 ):
-    plot_data = data.dropna(subset=['minute', 'ut_hour', value_column])
+    plot_data = data.dropna(
+        subset=['minute', 'ut_hour', value_column]
+    ).copy()
     if plot_data.empty:
         print(f'No finite values available for {title}')
         return None, None
 
+    # Build a complete date-by-UT grid. Each pcolormesh cell is one full day
+    # wide, so consecutive days touch while genuinely missing days stay white.
+    plot_data['date'] = plot_data['minute'].dt.normalize()
+    plot_data['minute_of_day'] = (
+        plot_data['minute'].dt.hour * 60
+        + plot_data['minute'].dt.minute
+    )
+    plot_data['minute_bin'] = (
+        plot_data['minute_of_day'] // time_bin_minutes
+    ) * time_bin_minutes
+
+    dates = pd.date_range(
+        plot_data['date'].min(),
+        plot_data['date'].max(),
+        freq='D',
+    )
+    minute_bins = np.arange(
+        UT_START * 60,
+        UT_END * 60,
+        time_bin_minutes,
+    )
+    grid = (
+        plot_data.pivot_table(
+            index='minute_bin',
+            columns='date',
+            values=value_column,
+            aggfunc='mean',
+        )
+        .reindex(index=minute_bins, columns=dates)
+    )
+
+    date_centers = mdates.date2num(dates.to_pydatetime())
+    date_edges = np.concatenate(
+        ([date_centers[0] - 0.5], date_centers + 0.5)
+    )
+    time_edges = np.arange(
+        UT_START * 60,
+        UT_END * 60 + time_bin_minutes,
+        time_bin_minutes,
+    ) / 60
+
+    plot_cmap = plt.get_cmap(cmap).copy()
+    plot_cmap.set_bad('white')
+
     fig, ax = plt.subplots(figsize=(12, 4))
-    points = ax.scatter(
-        plot_data['minute'].dt.normalize(),
-        plot_data['ut_hour'],
-        c=plot_data[value_column],
-        cmap=cmap,
+    mesh = ax.pcolormesh(
+        date_edges,
+        time_edges,
+        grid.to_numpy(),
+        cmap=plot_cmap,
         vmin=limits[0],
         vmax=limits[1],
-        marker='s',
-        s=marker_size,
-        linewidths=0,
+        shading='flat',
+        edgecolors='none',
         rasterized=True,
     )
 
     ax.set_ylim(UT_START, UT_END)
+    ax.set_xlim(date_edges[0], date_edges[-1])
     ax.set_ylabel('Time (UT)')
     ax.set_title(title)
     ax.text(
@@ -148,7 +194,7 @@ def plot_date_ut(
     fig.autofmt_xdate(rotation=0, ha='center')
 
     colorbar = fig.colorbar(
-        points,
+        mesh,
         ax=ax,
         pad=0.015,
         extend=extend,
@@ -232,7 +278,7 @@ fig_apparent_3min, ax_apparent_3min = plot_date_ut(
     cmap='jet',
     limits=VELOCITY_LIMITS,
     title='SBAS PRN 136: 3 min mean apparent drift',
-    marker_size=12,
+    time_bin_minutes=3,
     extend='both',
     colorbar_ticks=np.arange(20, 181, 20),
 )
@@ -247,7 +293,7 @@ fig_true_3min, ax_true_3min = plot_date_ut(
     cmap='jet',
     limits=VELOCITY_LIMITS,
     title='SBAS PRN 136: 3 min mean Briggs-corrected true drift',
-    marker_size=12,
+    time_bin_minutes=3,
     extend='both',
     colorbar_ticks=np.arange(20, 181, 20),
 )

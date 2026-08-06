@@ -31,6 +31,10 @@ def write_raw_correlation(path: Path, include_channel_2: bool = False) -> None:
             "svid": [5],
             "r_A": [[7.1, 35.1, 0.4]],
             "r_B": [[7.2, 35.2, 0.5]],
+            "s4_1_A": [0.2],
+            "s4_1_B": [0.2],
+            "s4_2_A": [0.2],
+            "s4_2_B": [0.2],
             "auto_cor_A_1": [[0.2, 0.5, 1.0, 0.5, 0.2]],
             "auto_cor_A_max_1": [1.0],
             "auto_cor_B_1": [[0.3, 0.6, 1.0, 0.6, 0.3]],
@@ -128,6 +132,31 @@ def test_reduce_file_flattens_coordinates_and_calculates_crossings(tmp_path):
         assert removed not in reduced
 
 
+def test_reduce_file_keeps_mutual_s4_events_on_either_channel(
+    tmp_path,
+):
+    source = tmp_path / "sc003_corrs_s4_filter.pq"
+    output = tmp_path / "lvl1" / "sc003_corrs_s4_filter_lvl1.pq"
+    write_raw_correlation(source)
+    row = pd.read_parquet(source)
+    frame = pd.concat([row] * 6, ignore_index=True)
+    frame[list(reducer.S4_FILTER_COLUMNS)] = 0.0
+    frame["svid"] = range(6)
+    frame.loc[0, ["s4_1_A", "s4_1_B"]] = 0.2
+    frame.loc[1, ["s4_2_A", "s4_2_B"]] = 0.2
+    frame.loc[2, ["s4_1_A", "s4_1_B"]] = [0.2, 0.1]
+    frame.loc[3, ["s4_2_A", "s4_2_B"]] = [0.2, 0.1]
+    frame.loc[4, ["s4_1_A", "s4_2_B"]] = 0.2
+    frame.loc[5, ["s4_1_A", "s4_1_B"]] = [np.nan, 0.2]
+    frame.to_parquet(source, index=False)
+
+    result = reducer.reduce_file(source, output)
+
+    reduced = pd.read_parquet(output)
+    assert result.row_count == 2
+    assert reduced["svid"].tolist() == [0, 1]
+
+
 def test_run_reduces_all_sources_and_combines_union_schema(tmp_path):
     first = tmp_path / "sc003_corrs_20230501_7.212S_35.906W.pq"
     second = tmp_path / "sc003_corrs_20230502_7.212S_35.906W.pq"
@@ -201,3 +230,22 @@ def test_old_output_is_rebuilt_when_new_metric_is_missing(tmp_path):
 
     assert result.status == "written"
     assert "max_auto_cross_corr_1" in pq.read_schema(output).names
+
+
+def test_existing_output_with_no_mutual_s4_channel_is_rebuilt(tmp_path):
+    source = tmp_path / "sc003_corrs_20230501.pq"
+    output = tmp_path / "lvl1" / "sc003_corrs_20230501_lvl1.pq"
+    write_raw_correlation(source)
+    reducer.reduce_file(source, output)
+
+    stale = pd.read_parquet(output)
+    stale.loc[0, "s4_1_B"] = 0.1
+    stale.loc[0, "s4_2_B"] = 0.1
+    stale.to_parquet(output, index=False)
+
+    result = reducer.reduce_file(source, output)
+
+    assert result.status == "written"
+    rebuilt = pd.read_parquet(output)
+    assert rebuilt.loc[0, "s4_1_B"] == pytest.approx(0.2)
+    assert rebuilt.loc[0, "s4_2_B"] == pytest.approx(0.2)

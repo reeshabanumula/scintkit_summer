@@ -4,7 +4,8 @@ Each input file is reduced independently. Correlation/list columns are read one
 at a time so a worker does not need to materialize every large array column at
 once. Receiver coordinate lists are expanded to latitude, longitude, and
 height columns. After every input has a successful level-1 output, the level-1
-files from the current run are concatenated into one Parquet file.
+files from the current run are filtered to mutual S4 events on either channel
+and concatenated into one Parquet file.
 """
 
 from __future__ import annotations
@@ -28,6 +29,8 @@ DEFAULT_INPUT_DIR = Path("/titan/frodrigues/corrs_sc003")
 DEFAULT_PATTERN = "sc003_corrs_*.pq"
 DEFAULT_COMBINED_NAME = "sc003_corrs_all_lvl1.pq"
 DEFAULT_SECONDS_PER_SAMPLE = 0.05
+S4_THRESHOLD = 0.1
+S4_FILTER_COLUMNS = ("s4_1_A", "s4_1_B", "s4_2_A", "s4_2_B")
 COORDINATE_COLUMNS = ("r_A", "r_B")
 CHANNEL_PATTERN = re.compile(r"^(?:auto_cor_[AB]|corr_norm)_(\d+)$")
 
@@ -139,6 +142,33 @@ def read_scalar_frame(parquet_file: pq.ParquetFile) -> pd.DataFrame:
         )
 
     return frame
+
+
+def filter_mutual_s4(
+    frame: pd.DataFrame,
+    threshold: float = S4_THRESHOLD,
+) -> pd.DataFrame:
+    """Keep rows where A and B exceed the threshold on channel 1 or 2."""
+
+    missing = [column for column in S4_FILTER_COLUMNS if column not in frame]
+    if missing:
+        raise ValueError(
+            "Cannot apply the level-1 S4 filter; missing columns: "
+            f"{missing}"
+        )
+
+    values = {
+        column: pd.to_numeric(frame[column], errors="coerce").to_numpy(float)
+        for column in S4_FILTER_COLUMNS
+    }
+    keep = (
+        (values["s4_1_A"] > threshold)
+        & (values["s4_1_B"] > threshold)
+    ) | (
+        (values["s4_2_A"] > threshold)
+        & (values["s4_2_B"] > threshold)
+    )
+    return frame.loc[keep].reset_index(drop=True)
 
 
 def _iter_list_values(
@@ -606,7 +636,16 @@ def existing_output_is_current(source: Path, output: Path) -> bool:
         return False
     source_schema = pq.read_schema(source)
     output_schema = pq.read_schema(output)
-    return required_output_columns(source_schema).issubset(output_schema.names)
+    if not required_output_columns(source_schema).issubset(output_schema.names):
+        return False
+    if not set(S4_FILTER_COLUMNS).issubset(output_schema.names):
+        return False
+
+    s4_values = pq.read_table(
+        output,
+        columns=list(S4_FILTER_COLUMNS),
+    ).to_pandas()
+    return len(filter_mutual_s4(s4_values)) == len(s4_values)
 
 
 def write_parquet_atomic(frame: pd.DataFrame, output: Path) -> None:
@@ -660,6 +699,7 @@ def reduce_file(
             batch_size,
         )
 
+    frame = filter_mutual_s4(frame)
     write_parquet_atomic(frame, output)
     stale_error = error_path_for(output)
     if stale_error.exists():
