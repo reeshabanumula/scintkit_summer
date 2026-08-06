@@ -129,6 +129,16 @@ def calculate_s4(signal_values: pd.Series) -> float:
     return float(np.std(linear) / mean)
 
 
+def has_mutual_s4_event(s4: dict[str, float], threshold: float) -> bool:
+    """Return whether both receivers exceed the threshold on one channel."""
+
+    return any(
+        s4[f"{channel}_A"] > threshold
+        and s4[f"{channel}_B"] > threshold
+        for channel in SIGNAL_CHANNELS
+    )
+
+
 def unavailable_channel_metrics(sample_count: int) -> dict[str, object]:
     """Return a stable all-NaN result for an unavailable SNR channel."""
 
@@ -248,7 +258,7 @@ def process_file_pair(
             for channel in SIGNAL_CHANNELS
             for receiver in ("A", "B")
         }
-        if not any(value > cf.thresh for value in s4.values()):
+        if not has_mutual_s4_event(s4, cf.thresh):
             continue
 
         channel_metrics = {

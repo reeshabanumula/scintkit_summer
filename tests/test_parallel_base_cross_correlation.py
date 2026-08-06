@@ -44,6 +44,31 @@ def test_configured_sampling_rate_bypasses_detection(monkeypatch):
     assert result == 20.0
 
 
+@pytest.mark.parametrize(
+    ("s4", "expected"),
+    [
+        (
+            {"1_A": 0.2, "1_B": 0.3, "2_A": np.nan, "2_B": np.nan},
+            True,
+        ),
+        (
+            {"1_A": 0.2, "1_B": 0.05, "2_A": np.nan, "2_B": 0.3},
+            False,
+        ),
+        (
+            {"1_A": 0.2, "1_B": 0.05, "2_A": 0.05, "2_B": 0.3},
+            False,
+        ),
+        (
+            {"1_A": 0.1, "1_B": 0.3, "2_A": np.nan, "2_B": np.nan},
+            False,
+        ),
+    ],
+)
+def test_s4_event_requires_both_receivers_above_threshold(s4, expected):
+    assert cross_correlation.has_mutual_s4_event(s4, 0.1) is expected
+
+
 def test_discover_source_files_groups_filename_dates(tmp_path, monkeypatch):
     filenames = [
         "scintpi3_20221005_0000_359060.7812W_72122.4141S_v325.bin.zip",
