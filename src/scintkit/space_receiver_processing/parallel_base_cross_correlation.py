@@ -11,6 +11,9 @@ parent process combines rows and writes the daily result.
 This is the winning "parallel + baseline" method:
 
 - S4 event selection occurs after the full receiver merge.
+- S4 is calculated independently for each receiver and SNR channel.
+- Each SNR channel is correlated independently; unavailable channel-2
+  products are retained as NaN values.
 - Cross-correlation uses ``numpy.correlate``.
 - Configured ``sampling_rate`` takes precedence over automatic detection.
 - ``parallel_process_max_workers`` controls the worker count.
@@ -39,6 +42,7 @@ from scintkit.services.phase_detrend import detect_sampling_rate
 
 MERGE_KEYS = ["datetime", "svid", "cons"]
 MIN_SAMPLES = 10
+SIGNAL_CHANNELS = ("1", "2")
 
 
 def sampling_rate_hz(receiver: pd.DataFrame) -> float:
@@ -104,14 +108,110 @@ def normalized_numpy_correlation(
     )
 
 
+def calculate_s4(signal_values: pd.Series) -> float:
+    """Calculate S4 for one receiver/channel without another channel."""
+
+    signal_frame = pd.DataFrame({"signal": signal_values})
+    signal_frame = f.handle_nan(
+        signal_frame,
+        cf.nan_method,
+        sig_columns=["signal"],
+    )
+    values = np.asarray(signal_frame["signal"], dtype=float)
+    values = values[np.isfinite(values)]
+    if len(values) < MIN_SAMPLES:
+        return float("nan")
+
+    linear = np.asarray(f.db2lin(values), dtype=float)
+    mean = np.mean(linear)
+    if not np.isfinite(mean) or mean <= 0:
+        return float("nan")
+    return float(np.std(linear) / mean)
+
+
+def unavailable_channel_metrics(sample_count: int) -> dict[str, object]:
+    """Return a stable all-NaN result for an unavailable SNR channel."""
+
+    correlation_length = max(2 * sample_count - 1, 1)
+    nan_array = np.full(correlation_length, np.nan)
+    return {
+        "auto_a": nan_array.copy(),
+        "auto_a_max": np.nan,
+        "auto_b": nan_array.copy(),
+        "auto_b_max": np.nan,
+        "cross": nan_array.copy(),
+        "lags": nan_array.copy(),
+        "max_cross": np.nan,
+        "best_lag": np.nan,
+        "time_delay": np.nan,
+    }
+
+
+def correlate_channel(
+    group: pd.DataFrame,
+    channel: str,
+    seconds_per_sample: float,
+) -> dict[str, object]:
+    """Correlate one SNR channel without depending on any other channel."""
+
+    column_a = f"snr{channel}_A"
+    column_b = f"snr{channel}_B"
+    channel_group = f.handle_nan(
+        group.copy(),
+        cf.nan_method,
+        sig_columns=[column_a, column_b],
+    )
+    unavailable = unavailable_channel_metrics(len(channel_group))
+    if len(channel_group) < MIN_SAMPLES:
+        return unavailable
+
+    values_a = np.asarray(channel_group[column_a], dtype=float)
+    values_b = np.asarray(channel_group[column_b], dtype=float)
+    if (
+        not np.all(np.isfinite(values_a))
+        or not np.all(np.isfinite(values_b))
+        or np.std(values_a) == 0
+        or np.std(values_b) == 0
+    ):
+        return unavailable
+
+    max_cross, best_lag, cross, lags = normalized_numpy_correlation(
+        channel_group[column_a],
+        channel_group[column_b],
+    )
+    max_auto_a, _, auto_a, _ = normalized_numpy_correlation(
+        channel_group[column_a],
+        channel_group[column_a],
+    )
+    max_auto_b, _, auto_b, _ = normalized_numpy_correlation(
+        channel_group[column_b],
+        channel_group[column_b],
+    )
+    return {
+        "auto_a": auto_a,
+        "auto_a_max": max_auto_a,
+        "auto_b": auto_b,
+        "auto_b_max": max_auto_b,
+        "cross": cross,
+        "lags": lags,
+        "max_cross": max_cross,
+        "best_lag": best_lag,
+        "time_delay": best_lag * seconds_per_sample,
+    }
+
+
 def process_file_pair(
     pair: tuple[Path, Path],
 ) -> tuple[list[dict[str, object]], Path, Path]:
-    """Process one receiver pair with the unchanged NumPy baseline logic."""
+    """Process one receiver pair with independent SNR-channel handling."""
 
     file_a, file_b = pair
     receiver_a = pd.read_parquet(file_a)
     receiver_b = pd.read_parquet(file_b)
+
+    for receiver in (receiver_a, receiver_b):
+        if "snr2" not in receiver.columns:
+            receiver["snr2"] = np.nan
 
     receiver_a = receiver_a[
         receiver_a["elev"] > cf.elevation_filter
@@ -141,68 +241,78 @@ def process_file_pair(
         ["svid", "cons", "_event_minute"],
         sort=False,
     ):
-        group = f.handle_nan(
-            unclean_group.copy(),
-            cf.nan_method,
-            sig_columns=["snr1_A", "snr1_B"],
-        )
-        if len(group) < MIN_SAMPLES:
+        s4 = {
+            f"{channel}_{receiver}": calculate_s4(
+                unclean_group[f"snr{channel}_{receiver}"]
+            )
+            for channel in SIGNAL_CHANNELS
+            for receiver in ("A", "B")
+        }
+        if not any(value > cf.thresh for value in s4.values()):
             continue
 
-        linear_a = f.db2lin(group["snr1_A"])
-        linear_b = f.db2lin(group["snr1_B"])
-        s4_a = np.std(linear_a) / np.mean(linear_a)
-        s4_b = np.std(linear_b) / np.mean(linear_b)
-        if not (s4_a > cf.thresh or s4_b > cf.thresh):
-            continue
-
-        values_a = np.asarray(group["snr1_A"], dtype=float)
-        values_b = np.asarray(group["snr1_B"], dtype=float)
-        if (
-            not np.all(np.isfinite(values_a))
-            or not np.all(np.isfinite(values_b))
-            or np.std(values_a) == 0
-            or np.std(values_b) == 0
-        ):
-            continue
-
-        max_cross, best_lag, cross, lags = normalized_numpy_correlation(
-            group["snr1_A"],
-            group["snr1_B"],
-        )
-        max_auto_a, _, auto_a, _ = normalized_numpy_correlation(
-            group["snr1_A"],
-            group["snr1_A"],
-        )
-        max_auto_b, _, auto_b, _ = normalized_numpy_correlation(
-            group["snr1_B"],
-            group["snr1_B"],
-        )
+        channel_metrics = {
+            channel: correlate_channel(
+                unclean_group,
+                channel,
+                seconds_per_sample,
+            )
+            for channel in SIGNAL_CHANNELS
+        }
 
         rows.append(
             {
                 "source_a": file_a.name,
                 "source_b": file_b.name,
                 "minute": minute,
-                "prn": group["prn_B"].iloc[0],
+                "prn": unclean_group["prn_B"].iloc[0],
                 "svid": svid,
                 "cons": cons,
-                "s4_1_A": s4_a,
-                "s4_1_B": s4_b,
-                "elev": group["elev_A"].mean(),
-                "azim": group["azim_A"].mean(),
+                "s4_1_A": s4["1_A"],
+                "s4_1_B": s4["1_B"],
+                "s4_2_A": s4["2_A"],
+                "s4_2_B": s4["2_B"],
+                "elev": unclean_group["elev_A"].mean(),
+                "azim": unclean_group["azim_A"].mean(),
                 "r_A": location_a,
                 "r_B": location_b,
                 "distance (km)": distance,
-                "auto_cor_A_1": auto_a,
-                "auto_cor_A_max_1": max_auto_a,
-                "auto_cor_B_1": auto_b,
-                "auto_cor_B_max_1": max_auto_b,
-                "corr_norm_1": cross,
-                "lag_norm_1": lags,
-                "max_corr_1": max_cross,
-                "best_lag_1": best_lag,
-                "time_delay_1": best_lag * seconds_per_sample,
+                **{
+                    f"auto_cor_A_{channel}": metrics["auto_a"]
+                    for channel, metrics in channel_metrics.items()
+                },
+                **{
+                    f"auto_cor_A_max_{channel}": metrics["auto_a_max"]
+                    for channel, metrics in channel_metrics.items()
+                },
+                **{
+                    f"auto_cor_B_{channel}": metrics["auto_b"]
+                    for channel, metrics in channel_metrics.items()
+                },
+                **{
+                    f"auto_cor_B_max_{channel}": metrics["auto_b_max"]
+                    for channel, metrics in channel_metrics.items()
+                },
+                **{
+                    f"corr_norm_{channel}": metrics["cross"]
+                    for channel, metrics in channel_metrics.items()
+                },
+                **{
+                    f"lag_norm_{channel}": metrics["lags"]
+                    for channel, metrics in channel_metrics.items()
+                },
+                **{
+                    f"max_corr_{channel}": metrics["max_cross"]
+                    for channel, metrics in channel_metrics.items()
+                },
+                **{
+                    f"best_lag_{channel}": metrics["best_lag"]
+                    for channel, metrics in channel_metrics.items()
+                },
+                **{
+                    f"time_delay_{channel}": metrics["time_delay"]
+                    for channel, metrics in channel_metrics.items()
+                },
             }
         )
 
@@ -230,14 +340,22 @@ def discover_source_files_by_day() -> dict[date, list[Path]]:
             f"Storage folder does not exist:\n{storage_folder}"
         )
 
+    input_patterns = [
+        pattern.strip()
+        for pattern in cf.input_pattern.split(",")
+        if pattern.strip()
+    ]
     source_files = sorted(
-        file
-        for file in storage_folder.glob(cf.input_pattern)
-        if file.is_file()
+        {
+            file
+            for pattern in input_patterns
+            for file in storage_folder.glob(pattern)
+            if file.is_file()
+        }
     )
     if not source_files:
         raise FileNotFoundError(
-            f"No files matching {cf.input_pattern!r} in {storage_folder}"
+            f"No files matching {input_patterns!r} in {storage_folder}"
         )
 
     return group_files_by_filename_day(source_files)

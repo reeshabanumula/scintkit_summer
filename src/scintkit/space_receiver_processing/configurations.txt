@@ -6,7 +6,7 @@
 Data_folder1 = C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_lvl0\scintpi3_20221004_2000_359060.7812W_72122.4141S_v325_lvl0.pq
 Data_folder2 = C:\Users\irees\Downloads\Summer_learning\research26\Brazil_22_lvl0\scintpi3_20221004_2000_359072.7500W_72126.9375S_v325_lvl0.pq
 
-# Directory containing the source SC003 Level-0 bin.zip files.
+# Directory containing the raw SC003 ScintPi2/ScintPi3 files.
 input_directory = /titan/frodrigues/scintpi_storage/sc003_bin_files
 
 
@@ -58,10 +58,12 @@ nan_method = drop
 
 
 ############################################################
-# BIN.ZIP CONVERSION SETTINGS
+# RAW-FILE CONVERSION SETTINGS
 ############################################################
 
-input_pattern = *.bin.zip
+# Comma-separated glob patterns are supported. ScintPi2 stores v324 text data
+# in .dat.zip archives; ScintPi3 stores binary data in .bin.zip archives.
+input_pattern = scintpi2*.dat.zip, scintpi3*.bin.zip
 input_root = /titan/frodrigues/scintpi_storage/sc003_bin_files
 output_root = /home/igw180000/scratch
 temp_root = /home/igw180000/scratch

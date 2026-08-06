@@ -4,6 +4,7 @@ from datetime import date
 from pathlib import Path
 import sys
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -47,13 +48,17 @@ def test_discover_source_files_groups_filename_dates(tmp_path, monkeypatch):
     filenames = [
         "scintpi3_20221005_0000_359060.7812W_72122.4141S_v325.bin.zip",
         "scintpi3_20221004_2000_359072.7500W_72126.9375S_v325.bin.zip",
-        "scintpi3_20221004_2000_359060.7812W_72122.4141S_v325.bin.zip",
+        "scintpi2_20221004_2000_359060.7812W_72122.4141S_v324.dat.zip",
     ]
     for filename in filenames:
         (tmp_path / filename).touch()
 
     monkeypatch.setattr(cross_correlation.cf, "storage_folder", str(tmp_path))
-    monkeypatch.setattr(cross_correlation.cf, "input_pattern", "*.bin.zip")
+    monkeypatch.setattr(
+        cross_correlation.cf,
+        "input_pattern",
+        "scintpi2*.dat.zip, scintpi3*.bin.zip",
+    )
 
     batches = cross_correlation.discover_source_files_by_day()
 
@@ -64,6 +69,70 @@ def test_discover_source_files_groups_filename_dates(tmp_path, monkeypatch):
     assert [file.name for file in batches[date(2022, 10, 5)]] == [
         filenames[0]
     ]
+
+
+def test_mixed_scintpi_pair_keeps_snr1_and_writes_nan_channel_2(
+    tmp_path,
+    monkeypatch,
+):
+    sample_count = 20
+    datetimes = pd.date_range(
+        "2022-10-04 20:00:00",
+        periods=sample_count,
+        freq="50ms",
+    )
+    snr1 = [30.0, 50.0] * (sample_count // 2)
+    common = {
+        "datetime": datetimes,
+        "cons": [0] * sample_count,
+        "svid": [10] * sample_count,
+        "elev": [45] * sample_count,
+        "azim": [180] * sample_count,
+        "snr1": snr1,
+    }
+    receiver_a = pd.DataFrame(common)
+    receiver_b = pd.DataFrame(
+        {
+            **common,
+            "snr2": [35.0, 48.0] * (sample_count // 2),
+        }
+    )
+    file_a = tmp_path / (
+        "scintpi2_20221004_2000_359060.7812W_"
+        "72122.4141S_v324_lvl0.pq"
+    )
+    file_b = tmp_path / (
+        "scintpi3_20221004_2000_359072.7500W_"
+        "72126.9375S_v325_lvl0.pq"
+    )
+    receiver_a.to_parquet(file_a, index=False)
+    receiver_b.to_parquet(file_b, index=False)
+
+    monkeypatch.setattr(cross_correlation.cf, "elevation_filter", 10)
+    monkeypatch.setattr(cross_correlation.cf, "sampling_rate", 20.0)
+    monkeypatch.setattr(cross_correlation.cf, "nan_method", "drop")
+    monkeypatch.setattr(cross_correlation.cf, "thresh", 0.1)
+
+    rows, processed_a, processed_b = cross_correlation.process_file_pair(
+        (file_a, file_b)
+    )
+
+    assert (processed_a, processed_b) == (file_a, file_b)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["s4_1_A"] > 0.1
+    assert row["s4_1_B"] > 0.1
+    assert pd.isna(row["s4_2_A"])
+    assert row["s4_2_B"] > 0.1
+    assert np.isfinite(row["max_corr_1"])
+    assert pd.isna(row["max_corr_2"])
+    assert np.isnan(row["corr_norm_2"]).all()
+
+    saved_path = tmp_path / "mixed_corr.pq"
+    pd.DataFrame(rows).to_parquet(saved_path, index=False)
+    saved = pd.read_parquet(saved_path)
+    assert len(saved) == 1
+    assert pd.isna(saved.loc[0, "max_corr_2"])
 
 
 def test_date_shards_are_disjoint_and_preserve_whole_days():

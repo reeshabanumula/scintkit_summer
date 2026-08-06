@@ -49,9 +49,9 @@ def build_output_path(
 ) -> str:
     rel = os.path.relpath(input_file, input_root)
 
-    if rel.endswith(".bin.zip"):
+    if rel.endswith((".bin.zip", ".dat.zip")):
         rel = rel[:-8]
-    elif rel.endswith(".bin"):
+    elif rel.endswith((".bin", ".dat")):
         rel = rel[:-4]
     else:
         rel = os.path.splitext(rel)[0]
@@ -87,8 +87,9 @@ def process_one(
     overwrite: bool = False,
     verbose: bool = True,
 ) -> str:
-    local_tmpdir = None
+    """Convert one ScintPi ``.bin``/``.dat`` file or zip archive."""
 
+    local_tmpdir = None
 
     try:
         input_file = os.fspath(input_file)
@@ -116,7 +117,9 @@ def process_one(
 
         version = get_version(input_file)
         if version is None:
-            raise ValueError(f"could not determine version from filename: {input_file}")
+            raise ValueError(
+                f"could not determine version from filename: {input_file}"
+            )
 
         local_tmpdir = tempfile.mkdtemp(prefix="scintpi_", dir=temp_root)
         local_input = os.path.join(local_tmpdir, os.path.basename(input_file))
@@ -125,37 +128,48 @@ def process_one(
             print(f"copy: {input_file} -> {local_input}")
         shutil.copy2(input_file, local_input)
 
-        if local_input.endswith(".bin.zip"):
+        if local_input.endswith((".bin.zip", ".dat.zip")):
             if verbose:
                 print(f"extract: {local_input}")
 
             with zipfile.ZipFile(local_input, "r") as zf:
                 zf.extractall(local_tmpdir)
 
-            local_bin = local_input[:-4]
+            local_data = local_input[:-4]
 
-            if not os.path.exists(local_bin):
-                raise FileNotFoundError(f"extracted .bin not found: {local_bin}")
+            if not os.path.exists(local_data):
+                raise FileNotFoundError(
+                    f"extracted data file not found: {local_data}"
+                )
 
-        elif local_input.endswith(".bin"):
-            local_bin = local_input
+        elif local_input.endswith((".bin", ".dat")):
+            local_data = local_input
 
         else:
-            raise ValueError(f"expected .bin or .bin.zip file: {input_file}")
+            raise ValueError(
+                "expected .bin, .bin.zip, .dat, or .dat.zip file: "
+                f"{input_file}"
+            )
 
-        local_pq = str(Path(local_bin).with_suffix(".pq"))
+        local_pq = str(Path(local_data).with_suffix(".pq"))
 
         if verbose:
-            print(f"read: {local_bin} ({version})")
-        df = read_binary_file(local_bin, version)
+            print(f"read: {local_data} ({version})")
+        df = read_binary_file(local_data, version)
         df = gpsweek_tow_to_datetime(df)
 
+        # ScintPi2 has only the primary SNR channel. Keep the Level-0 schema
+        # compatible with ScintPi3 so downstream code can treat channel 2 as
+        # optional instead of branching on receiver generation.
+        if Path(input_file).name.lower().startswith("scintpi2"):
+            df["snr2"] = np.nan
+        elif "snr2" not in df.columns:
+            df["snr2"] = np.nan
 
-        df=drop_unnecessary_columns(df)
+        df = drop_unnecessary_columns(df)
 
         if verbose:
             print(f"writing to local parquet: {local_pq}")
-
 
         df.to_parquet(
             local_pq,
@@ -201,9 +215,8 @@ def process_files(
     overwrite: bool = False,
     verbose: bool = True,
 ) -> list[str]:
-    
     """
-    Convert a list of binary files to Parquet format, with optional parallel processing (set n_workers).
+    Convert ScintPi binary/text files to Parquet with optional workers.
 
     """
     args = [
